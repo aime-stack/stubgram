@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ActivityIndicator, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { Image } from 'expo-image';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, typography } from '@/styles/commonStyles';
@@ -21,8 +21,14 @@ export default function StoriesScreen() {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [isPaused, setIsPaused] = useState(false);
-    const videoRef = useRef<Video>(null);
     const [progress, setProgress] = useState(0);
+
+    const currentStory = stories.length > 0 ? stories[currentIndex] : null;
+
+    const player = useVideoPlayer(currentStory?.type === 'video' ? (currentStory.mediaUrl || '') : '', (player) => {
+        player.loop = false;
+        if (!isPaused) player.play();
+    });
 
     useEffect(() => {
         loadStories();
@@ -39,9 +45,6 @@ export default function StoriesScreen() {
         }
     };
 
-    // Get current story safely
-    const currentStory = stories.length > 0 ? stories[currentIndex] : null;
-
     // Mark as viewed when story changes
     useEffect(() => {
         if (currentStory && !currentStory.isViewed) {
@@ -51,63 +54,63 @@ export default function StoriesScreen() {
         }
     }, [currentStory]);
 
-    const handleNext = () => {
+    const handleClose = useCallback(() => {
+        router.back();
+    }, [router]);
+
+    const handleNext = useCallback(() => {
         if (currentIndex < stories.length - 1) {
             setCurrentIndex(prev => prev + 1);
             setProgress(0);
         } else {
             handleClose();
         }
-    };
+    }, [currentIndex, stories.length, handleClose]);
 
-    const handlePrevious = () => {
+    const handlePrevious = useCallback(() => {
         if (currentIndex > 0) {
             setCurrentIndex(prev => prev - 1);
             setProgress(0);
         } else {
             setProgress(0);
         }
-    };
+    }, [currentIndex]);
 
-    const handleClose = () => {
-        router.back();
-    };
+    useEffect(() => {
+        const subscription = player.addListener('playToEnd', () => {
+            handleNext();
+        });
+        return () => subscription.remove();
+    }, [player, handleNext]);
 
-    // Auto-advance logic
+    // Auto-advance and progress logic
     useEffect(() => {
         if (!currentStory || isPaused) return;
 
         let interval: ReturnType<typeof setInterval>;
 
-        // Only auto-advance for image/text stories
         if (currentStory.type === 'video') {
-            return;
+            interval = setInterval(() => {
+                if (player.duration > 0) {
+                    setProgress(player.currentTime / player.duration);
+                }
+            }, 50);
+        } else {
+            const startTime = Date.now();
+            interval = setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                const newProgress = elapsed / STORY_DURATION;
+
+                if (newProgress >= 1) {
+                    handleNext();
+                } else {
+                    setProgress(newProgress);
+                }
+            }, 50);
         }
-
-        const startTime = Date.now();
-        interval = setInterval(() => {
-            const elapsed = Date.now() - startTime;
-            const newProgress = elapsed / STORY_DURATION;
-
-            if (newProgress >= 1) {
-                handleNext();
-            } else {
-                setProgress(newProgress);
-            }
-        }, 50);
 
         return () => clearInterval(interval);
-    }, [currentIndex, currentStory, isPaused]);
-
-    const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-        if (!status.isLoaded) return;
-
-        if (status.didJustFinish) {
-            handleNext();
-        } else {
-            setProgress(status.positionMillis / (status.durationMillis || 1));
-        }
-    };
+    }, [currentIndex, currentStory, isPaused, player]);
 
     if (isLoading) {
         return (
@@ -151,14 +154,11 @@ export default function StoriesScreen() {
             )}
 
             {currentStory.type === 'video' && currentStory.mediaUrl && (
-                <Video
-                    ref={videoRef}
-                    source={{ uri: currentStory.mediaUrl }}
+                <VideoView
+                    player={player}
                     style={styles.media}
-                    resizeMode={ResizeMode.COVER}
-                    shouldPlay={!isPaused}
-                    isLooping={false}
-                    onPlaybackStatusUpdate={onPlaybackStatusUpdate}
+                    contentFit="cover"
+                    nativeControls={false}
                 />
             )}
 

@@ -140,5 +140,6 @@ CREATE TRIGGER on_space_created
 -- Success Message
 DO $$
 BEGIN
-  RAISE NOTICE 'SnapGram Video Spaces schema (Milestone 1) created successfully!';
+  RAISE NOTICE 'StubGram Video Spaces schema (Milestone 1) created successfully!';
 END $$;
+

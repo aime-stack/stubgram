@@ -41,6 +41,19 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="reels"
+        options={{
+          tabBarIcon: ({ color, focused }) => (
+            <IconSymbol
+              ios_icon_name={focused ? "play.rectangle.fill" : "play.rectangle"}
+              android_material_icon_name={focused ? "play-circle-filled" : "play-circle-outline"}
+              size={28}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="wallet"
         options={{
           tabBarIcon: ({ color, focused }) => (

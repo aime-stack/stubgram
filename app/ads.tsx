@@ -20,6 +20,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import { PremiumHeader } from '@/components/PremiumHeader';
 import { useWalletStore } from '@/stores/walletStore';
 import { useAuthStore } from '@/stores/authStore';
 import { apiClient } from '@/services/api';
@@ -274,13 +275,11 @@ export default function AdsScreen() {
 
     return (
         <View style={styles.container}>
-            <Stack.Screen
-                options={{
-                    title: 'Advertising',
-                    headerShown: true,
-                    headerStyle: { backgroundColor: colors.background },
-                    headerTintColor: colors.text,
-                }}
+            <PremiumHeader 
+                title="Advertising" 
+                subtitle="Reach more users with targeted ads"
+                iosIconName="megaphone.fill"
+                androidIconName="campaign"
             />
 
             {/* Wallet Balance Banner */}
@@ -314,11 +313,11 @@ export default function AdsScreen() {
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     keyboardVerticalOffset={100}
                 >
-                    <ScrollView
-                        style={styles.content}
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-                    >
+                <ScrollView
+                    style={styles.content}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+                >
                         {/* Ad Title */}
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Ad Title *</Text>

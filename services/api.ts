@@ -1,8 +1,10 @@
 
 import { supabase } from '@/lib/supabase';
-import { Post, Story, User, Comment, Notification } from '@/types';
+import { Post, Reel, Story, User, Comment, Notification } from '@/types';
+import * as FileSystem from 'expo-file-system/legacy';
 
 class ApiClient {
+  private backendUrl = process.env.EXPO_PUBLIC_API_URL || 'https://v6r7hhgft77nghz9ncgpb9mfgkx69bg4.app.specular.dev';
   // Cache for profiles to avoid refetching
   private profileCache: Map<string, User> = new Map();
 
@@ -24,52 +26,128 @@ class ApiClient {
   private async requireAuth(): Promise<{ id: string }> {
     const user = await this.getCurrentUser();
     if (!user) {
+      console.warn('[ApiClient] requireAuth failed: No user found');
       throw new Error('Not authenticated');
     }
+    console.log('[ApiClient] requireAuth success for user:', user.id);
     return user;
   }
 
   // --- Media Upload ---
+  // --- Media Upload ---
   async uploadMedia(
     uri: string,
-    bucket: 'posts' | 'stories' | 'avatars' | 'courses',
-    fileName: string
+    bucket: 'posts' | 'reels' | 'stories' | 'avatars' | 'courses',
+    fileName: string,
+    onProgress?: (progress: number) => void
   ): Promise<string> {
     try {
-      // Use fetch to get blob/buffer - working with Expo ecosystem
-      const response = await fetch(uri);
-      const arrayBuffer = await response.arrayBuffer();
-
-      // Determine content type from extension
+      // Determine content type
       const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
-      const contentType = ext === 'mp4' || ext === 'mov'
-        ? 'video/mp4'
-        : ext === 'png'
-          ? 'image/png'
-          : 'image/jpeg';
+      let contentType = 'image/jpeg';
+      if (ext === 'png') contentType = 'image/png';
+      if (ext === 'mp4' || ext === 'mov') contentType = 'video/mp4';
 
       const filePath = `${fileName}.${ext}`;
+      
+      // Construct Supabase Storage URL
+      // Pattern: https://<project>.supabase.co/storage/v1/object/<bucket>/<path>
+      // We need to strip the /storage/v1... part if supabaseUrl already has it, but usually standard is:
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${filePath}`;
 
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(filePath, arrayBuffer, {
-          contentType,
-          upsert: true,
-        });
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const apiKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-      if (error) throw error;
+      if (!token || !apiKey) throw new Error('Auth tokens missing for upload');
 
-      // Get public URL
+      // Native Upload (Memory Safe)
+      const uploadResult = await FileSystem.uploadAsync(uploadUrl, uri, {
+        httpMethod: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: apiKey,
+          'Content-Type': contentType,
+          'x-upsert': 'true', // Overwrite if exists
+        },
+        uploadType: (FileSystem as any).FileSystemUploadType?.BINARY_CONTENT ?? (FileSystem as any).UploadType?.BINARY_CONTENT ?? 0,
+      });
+
+      if (uploadResult.status !== 200) {
+        throw new Error(`Upload failed with status ${uploadResult.status}: ${uploadResult.body}`);
+      }
+
+      // If success, get public URL
       const { data: urlData } = supabase.storage
         .from(bucket)
-        .getPublicUrl(data.path);
+        .getPublicUrl(filePath);
 
+      // Simulate progress if not provided by FileSystem (FileSystem.uploadAsync doesn't support progress callback natively in managed workflow easily without task manager, 
+      // BUT for this phase we really want to avoid memory crash. 
+      // To get progress with FileSystem, we need createUploadTask. Let's switch to that.
+      
       return urlData.publicUrl;
     } catch (error) {
       console.error('Upload failed:', error);
       throw error;
     }
+  }
+
+  // Improved version with Progress (using createUploadTask)
+  async uploadMediaWithProgress(
+    uri: string,
+    bucket: 'posts' | 'reels' | 'stories' | 'avatars' | 'courses',
+    fileName: string,
+    onProgress?: (progress: number) => void
+  ): Promise<string> {
+      const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+      let contentType = 'image/jpeg';
+      if (ext === 'png') contentType = 'image/png';
+      if (ext === 'mp4' || ext === 'mov') contentType = 'video/mp4';
+
+      const filePath = `${fileName}.${ext}`;
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${filePath}`;
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const apiKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (!token || !apiKey) throw new Error('Auth tokens missing');
+
+      const task = FileSystem.createUploadTask(
+        uploadUrl,
+        uri,
+        {
+          httpMethod: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            apikey: apiKey,
+            'Content-Type': contentType,
+            'x-upsert': 'true',
+          },
+          uploadType: (FileSystem as any).FileSystemUploadType?.BINARY_CONTENT ?? (FileSystem as any).UploadType?.BINARY_CONTENT ?? 0,
+        },
+        (data) => {
+          if (onProgress) {
+             const progress = data.totalBytesSent / data.totalBytesExpectedToSend;
+             onProgress(Math.round(progress * 100));
+          }
+        }
+      );
+
+      const result = await task.uploadAsync();
+      
+      if (!result || result.status !== 200) {
+        throw new Error(`Upload failed: ${result?.body}`);
+      }
+
+       const { data: urlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(filePath);
+
+      return urlData.publicUrl;
   }
 
   // --- Auth ---
@@ -92,8 +170,12 @@ class ApiClient {
   async createPost(data: {
     type: string;
     content?: string;
-    mediaUrl?: string;
+    mediaUrl?: string; // image_url
+    videoUrl?: string; // video_url
+    thumbnailUrl?: string;
     linkUrl?: string;
+    linkMetadata?: any;
+    mediaMetadata?: any;
     pollOptions?: string[];
   }) {
     const user = await this.requireAuth();
@@ -105,6 +187,12 @@ class ApiClient {
         type: data.type,
         content: data.content,
         image_url: data.mediaUrl,
+        video_url: data.videoUrl,
+        thumbnail_url: data.thumbnailUrl,
+        link_url: data.linkUrl,
+        link_metadata: data.linkMetadata,
+        media_metadata: data.mediaMetadata,
+        poll_options: data.pollOptions ? JSON.stringify(data.pollOptions) : undefined,
       })
       .select('*')
       .single();
@@ -117,15 +205,18 @@ class ApiClient {
     return { data: this.mapPost(post, profile) };
   }
 
-  async getFeed(page = 1, limit = 10) {
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
-
-    const { data: posts, error } = await supabase
+  async getFeed(cursor?: string, limit: number = 10) {
+    let query = supabase
       .from('posts')
       .select('*')
       .order('created_at', { ascending: false })
-      .range(from, to);
+      .limit(limit);
+
+    if (cursor) {
+      query = query.lt('created_at', cursor);
+    }
+
+    const { data: posts, error } = await query;
 
     if (error) throw error;
     if (!posts || posts.length === 0) {
@@ -142,7 +233,21 @@ class ApiClient {
     return {
       data: posts.map((p) => this.mapPost(p, profileMap.get(p.user_id))),
       hasMore: posts.length === limit,
+      nextCursor: posts.length > 0 ? posts[posts.length - 1].created_at : null
     };
+  }
+
+  async fetchLinkMetadata(url: string) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke('fetch-link-metadata', {
+      body: { url },
+      headers: {
+        Authorization: `Bearer ${session?.access_token}`
+      }
+    });
+
+    if (error) throw error;
+    return data;
   }
 
   async getPost(postId: string) {
@@ -222,7 +327,7 @@ class ApiClient {
 
       return {
         success: true,
-        shareUrl: `https://snapgram.app/post/${postId}`
+        shareUrl: `https://StubGram.app/post/${postId}`
       };
     }
   }
@@ -345,6 +450,88 @@ class ApiClient {
     return { data: posts.map((p) => this.mapPost(p, profile)) };
   }
 
+  async getUserReplies(userId: string) {
+    // Select latest comments by the user
+    const { data: comments, error: commentError } = await supabase
+      .from('comments')
+      .select('post_id, content, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (commentError) throw commentError;
+    if (!comments || comments.length === 0) return { data: [] };
+
+    // Get the posts being replied to
+    const postIds = [...new Set(comments.map(c => c.post_id))];
+    const { data: posts, error: postError } = await supabase
+      .from('posts')
+      .select('*')
+      .in('id', postIds);
+
+    if (postError) throw postError;
+
+    const postUserIds = [...new Set(posts.map(p => p.user_id))];
+    const profiles = await this.getProfilesByIds(postUserIds);
+    const profileMap = new Map(profiles.map(p => [p.id, p]));
+
+    // Return posts, but sorted by reply time
+    const resultPosts = comments.map(comment => {
+      const post = posts.find(p => p.id === comment.post_id);
+      if (!post) return null;
+      const mapped = this.mapPost(post, profileMap.get(post.user_id));
+      // Attach the reply content as a meta-field if needed, 
+      // but for now we just want them to show up in the tab.
+      return mapped;
+    }).filter(Boolean) as Post[];
+
+    return { data: resultPosts };
+  }
+
+  async getUserLikes(userId: string) {
+    const { data: likes, error: likeError } = await supabase
+      .from('likes')
+      .select('post_id')
+      .eq('user_id', userId);
+
+    if (likeError) throw likeError;
+    if (!likes || likes.length === 0) return { data: [] };
+
+    const postIds = [...new Set(likes.map(l => l.post_id))];
+    const { data: posts, error: postError } = await supabase
+      .from('posts')
+      .select('*')
+      .in('id', postIds)
+      .order('created_at', { ascending: false });
+
+    if (postError) throw postError;
+
+    const postUserIds = [...new Set(posts.map(p => p.user_id))];
+    const profiles = await this.getProfilesByIds(postUserIds);
+    const profileMap = new Map(profiles.map(p => [p.id, p]));
+
+    return { data: posts.map((p) => this.mapPost(p, profileMap.get(p.user_id))) };
+  }
+
+  async getUserMedia(userId: string) {
+    // Fetch posts that have media (images or videos)
+    const { data: posts, error } = await supabase
+      .from('posts')
+      .select('*')
+      .eq('user_id', userId)
+      .or('image_url.neq.null,video_url.neq.null')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const profile = await this.getProfileById(userId);
+
+    // Map and return
+    return { 
+      data: (posts || []).map(p => this.mapPost(p, profile)) 
+    };
+  }
+
   // --- Profile Helpers ---
 
   private async getProfileById(userId: string): Promise<User> {
@@ -455,14 +642,25 @@ class ApiClient {
       user: profile || ({} as User),
       type: row.type || 'text',
       content: row.content,
-      mediaUrl: row.image_url,
+      mediaUrl: row.video_url || row.image_url,
+      videoUrl: row.video_url,
+      thumbnailUrl: row.thumbnail_url,
+      viewsCount: row.views_count || 0,
+      mediaMetadata: row.media_metadata,
+      pollOptions: row.poll_options ? JSON.parse(row.poll_options) : undefined,
       likesCount: row.likes_count || 0,
       commentsCount: row.comments_count || 0,
       sharesCount: row.shares_count || 0,
-      isLiked: false,
+      isLiked: false, // Will be set by feed logic if needed
       isBoosted: row.is_boosted || false,
       createdAt: row.created_at,
       updatedAt: row.updated_at || row.created_at,
+      // Transcoding fields
+      processing_status: row.processing_status,
+      original_url: row.original_url,
+      processed_url: row.processed_url,
+      duration: row.duration,
+      resolution: row.resolution,
     };
   }
 
@@ -498,8 +696,46 @@ class ApiClient {
     } as User;
   }
 
-  // --- Stubs ---
+  private mapReel(row: any, profile?: User): Reel {
+    const post = this.mapPost(row, profile);
+    return {
+      ...post,
+      videoUrl: post.videoUrl || post.mediaUrl || '',
+    } as Reel;
+  }
 
+  async getReels(page = 1, limit = 10) {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    console.log(`[ApiClient] Fetching reels: range ${from}-${to}`);
+    const { data: posts, error } = await supabase
+      .from('posts')
+      .select('*')
+      .eq('type', 'reel')
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (error) {
+        console.error('[ApiClient] getReels Error:', error);
+        throw error;
+    }
+    console.log(`[ApiClient] getReels success, count: ${posts?.length || 0}`);
+    if (!posts || posts.length === 0) {
+      console.log('[ApiClient] No reels found in table.');
+      return { data: [], hasMore: false };
+    }
+    console.log('[ApiClient] First reel raw:', JSON.stringify(posts[0]));
+
+    const userIds = [...new Set(posts.map(p => p.user_id))];
+    const profiles = await this.getProfilesByIds(userIds);
+    const profileMap = new Map(profiles.map(p => [p.id, p]));
+
+    return {
+      data: posts.map((p) => this.mapReel(p, profileMap.get(p.user_id))),
+      hasMore: posts.length === limit,
+    };
+  }
   async getStories(userId?: string) {
     // 1. Fetch active stories with user profiles
     let query = supabase
@@ -579,43 +815,6 @@ class ApiClient {
       console.error('Error marking story as viewed:', error);
     }
   }
-
-  async getWallet() {
-    const user = await this.getCurrentUser();
-    if (!user) return { data: { balance: 0 } };
-
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
-
-    return { data: { balance: wallet?.balance || 0 } };
-  }
-
-  async getTransactions() {
-    const user = await this.getCurrentUser();
-    if (!user) return { data: { data: [] } };
-
-    const { data: transactions } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    return {
-      data: {
-        data: (transactions || []).map(t => ({
-          id: t.id,
-          type: t.type,
-          amount: t.amount,
-          description: t.description,
-          createdAt: t.created_at,
-        }))
-      }
-    };
-  }
-
   // --- Chat ---
 
   async getConversations() {
@@ -1093,12 +1292,20 @@ class ApiClient {
     }
     if (error) throw error;
 
+    // Invalidate caches
+    this.profileCache.delete(currentUser.id);
+    this.profileCache.delete(userId);
+
     // Update follower/following counts
-    await supabase.rpc('update_follow_counts', {
+    const { error: rpcError } = await supabase.rpc('update_follow_counts', {
       p_follower_id: currentUser.id,
       p_following_id: userId,
       p_increment: true,
     });
+
+    if (rpcError) {
+      console.error('RPC Error (update_follow_counts):', rpcError);
+    }
 
     return { success: true };
   }
@@ -1114,14 +1321,48 @@ class ApiClient {
 
     if (error) throw error;
 
-    // Update follower/following counts
-    await supabase.rpc('update_follow_counts', {
+    // Invalidate caches
+    this.profileCache.delete(currentUser.id);
+    this.profileCache.delete(userId);
+
+    // Update counts
+    const { error: rpcError } = await supabase.rpc('update_follow_counts', {
       p_follower_id: currentUser.id,
       p_following_id: userId,
       p_increment: false,
     });
 
+    if (rpcError) {
+      console.error('RPC Error (update_follow_counts unfollow):', rpcError);
+    }
+
     return { success: true };
+  }
+
+  async getFollowers(userId: string) {
+    const { data: followers, error } = await supabase
+      .from('follows')
+      .select('follower_id, profiles!follower_id(*)')
+      .eq('following_id', userId);
+
+    if (error) throw error;
+
+    return {
+      data: (followers || []).map((f: any) => this.mapProfile(f.profiles))
+    };
+  }
+
+  async getFollowing(userId: string) {
+    const { data: following, error } = await supabase
+      .from('follows')
+      .select('following_id, profiles!following_id(*)')
+      .eq('follower_id', userId);
+
+    if (error) throw error;
+
+    return {
+      data: (following || []).map((f: any) => this.mapProfile(f.profiles))
+    };
   }
 
   async isFollowing(userId: string): Promise<boolean> {
@@ -1275,32 +1516,7 @@ class ApiClient {
   }
 
   // --- Ads ---
-
-  async getActiveAds(limit = 5) {
-    const { data: ads, error } = await supabase
-      .from('ads')
-      .select('*')
-      .eq('status', 'active')
-      .gt('remaining_coins', 0)
-      .gt('expires_at', new Date().toISOString())
-      .order('created_at', { ascending: false })
-      .limit(limit);
-
-    if (error) throw error;
-
-    return {
-      data: (ads || []).map(ad => ({
-        id: ad.id,
-        userId: ad.user_id,
-        title: ad.title,
-        content: ad.content,
-        imageUrl: ad.image_url,
-        linkUrl: ad.link_url,
-        tier: ad.tier,
-        isAd: true, // Flag to identify as ad in feed
-      })),
-    };
-  }
+  // Note: Full ads API implementation is below in the Coins/Rewards section
 
   async recordAdImpression(adId: string) {
     // Increment impression count and decrement remaining coins
@@ -1310,6 +1526,763 @@ class ApiClient {
   async recordAdClick(adId: string) {
     await supabase.rpc('record_ad_click', { ad_id: adId });
   }
+
+  // --- Reels ---
+
+  async likeReel(reelId: string) {
+    const user = await this.requireAuth();
+
+    const { error } = await supabase
+      .from('reel_likes')
+      .insert({ user_id: user.id, reel_id: reelId });
+
+    if (error && error.code === '23505') {
+      await supabase
+        .from('reel_likes')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('reel_id', reelId);
+      return { data: { isLiked: false } };
+    }
+
+    return { data: { isLiked: true } };
+  }
+
+  async recordReelView(reelId: string) {
+    // Basic view increment
+    await supabase.rpc('increment_reel_views', { p_reel_id: reelId });
+  }
+
+  async getReelComments(reelId: string) {
+    const { data: comments, error } = await supabase
+      .from('reel_comments')
+      .select('*')
+      .eq('reel_id', reelId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    const userIds = [...new Set((comments || []).map(c => c.user_id))];
+    const profiles = await this.getProfilesByIds(userIds);
+    const profileMap = new Map(profiles.map(p => [p.id, p]));
+
+    return {
+      data: (comments || []).map(c => this.mapComment(c, profileMap.get(c.user_id)))
+    };
+  }
+
+  async commentOnReel(reelId: string, content: string) {
+    const user = await this.requireAuth();
+
+    const { data: comment, error } = await supabase
+      .from('reel_comments')
+      .insert({
+        reel_id: reelId,
+        user_id: user.id,
+        content,
+      })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    const profile = await this.getProfileById(user.id);
+    return { data: this.mapComment(comment, profile) };
+  }
+
+  // --- Wallet & Payments ---
+
+  private async getAuthHeaders() {
+    const { data: { session } } = await supabase.auth.getSession();
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': session ? `Bearer ${session.access_token}` : '',
+    };
+  }
+
+  async getWallet() {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${this.backendUrl}/wallet`, {
+      headers
+    });
+    if (!response.ok) throw new Error('Failed to fetch wallet');
+    return { data: await response.json() };
+  }
+
+  async getTransactions(page = 1, limit = 20) {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${this.backendUrl}/wallet/transactions?page=${page}&limit=${limit}`, {
+      headers
+    });
+    if (!response.ok) throw new Error('Failed to fetch transactions');
+    return { data: await response.json() };
+  }
+
+  async deposit(amount: number, phoneNumber: string) {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${this.backendUrl}/wallet/deposit`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ amount, phoneNumber })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.message || 'Deposit failed');
+    }
+    return { data: await response.json() };
+  }
+
+  async withdraw(amount: number, phoneNumber: string) {
+    const headers = await this.getAuthHeaders();
+    const response = await fetch(`${this.backendUrl}/wallet/withdraw`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ amount, phoneNumber })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.message || 'Withdrawal failed');
+    }
+    return { data: await response.json() };
+  }
+
+  // --- Meetings ---
+
+  async createMeeting(data: {
+    title: string;
+    description?: string;
+    type: 'public' | 'private' | 'scheduled';
+    startTime?: string;
+    password?: string;
+  }) {
+    const user = await this.requireAuth();
+
+    const { data: meeting, error } = await supabase
+      .from('meetings')
+      .insert({
+        host_id: user.id,
+        title: data.title,
+        description: data.description,
+        meeting_id: this.generateMeetingId(),
+        type: data.type,
+        status: data.type === 'scheduled' ? 'scheduled' : 'active',
+        start_time: data.startTime || new Date().toISOString(),
+        is_password_protected: !!data.password,
+        meeting_password: data.password,
+      })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    // Add host as participant
+    await supabase.from('meeting_participants').insert({
+      meeting_id: meeting.id,
+      user_id: user.id,
+      role: 'host',
+    });
+
+    const profile = await this.getProfileById(user.id);
+    return { data: this.mapMeeting(meeting, profile) };
+  }
+
+  async getMeetingByCode(meetingId: string, password?: string) {
+    const { data: meeting, error } = await supabase
+      .from('meetings')
+      .select('*')
+      .eq('meeting_id', meetingId)
+      .single();
+
+    if (error) throw error;
+    if (!meeting) throw new Error('Meeting not found');
+
+    if (meeting.is_password_protected && meeting.meeting_password !== password) {
+      throw new Error('Invalid password');
+    }
+
+    const profile = await this.getProfileById(meeting.host_id);
+    return { data: this.mapMeeting(meeting, profile) };
+  }
+
+  async joinMeeting(meetingId: string) {
+    const user = await this.requireAuth();
+
+    const { data: meeting } = await this.getMeetingByCode(meetingId);
+
+    // Check if already joined
+    const { data: existing } = await supabase
+      .from('meeting_participants')
+      .select('*')
+      .eq('meeting_id', meeting.id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!existing) {
+      await supabase.from('meeting_participants').insert({
+        meeting_id: meeting.id,
+        user_id: user.id,
+        role: 'participant',
+      });
+    }
+
+    return { data: meeting };
+  }
+
+  async getMeetingParticipants(meetingId: string) {
+    const { data: participants, error } = await supabase
+      .from('meeting_participants')
+      .select('*, user:profiles!user_id(*)')
+      .eq('meeting_id', meetingId)
+      .is('left_at', null);
+
+    if (error) throw error;
+
+    return {
+      data: participants.map((p: any) => ({
+        id: p.id,
+        meetingId: p.meeting_id,
+        userId: p.user_id,
+        role: p.role,
+        isMuted: p.is_muted || false,
+        hasVideo: p.has_video || false,
+        handRaised: p.hand_raised || false,
+        joinedAt: p.joined_at,
+        leftAt: p.left_at,
+        user: {
+          id: p.user.id,
+          username: p.user.username,
+          email: p.user.email || '',
+          avatar: p.user.avatar_url,
+          isVerified: p.user.is_verified || false,
+          isCelebrity: false,
+          followersCount: 0,
+          followingCount: 0,
+          postsCount: 0,
+          createdAt: p.user.created_at,
+        },
+      })),
+    };
+  }
+
+  async leaveMeeting(meetingId: string) {
+    const user = await this.requireAuth();
+
+    const { error } = await supabase
+      .from('meeting_participants')
+      .update({ left_at: new Date().toISOString() })
+      .eq('meeting_id', meetingId)
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+    return { data: { success: true } };
+  }
+
+  async endMeeting(meetingId: string) {
+    const user = await this.requireAuth();
+
+    const { error } = await supabase
+      .from('meetings')
+      .update({
+        status: 'ended',
+        end_time: new Date().toISOString(),
+      })
+      .eq('meeting_id', meetingId)
+      .eq('host_id', user.id);
+
+    if (error) throw error;
+    return { data: { success: true } };
+  }
+
+  private generateMeetingId(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 10; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
+  private mapMeeting(row: any, host: User): any {
+    return {
+      id: row.id,
+      hostId: row.host_id,
+      host,
+      title: row.title,
+      description: row.description,
+      meetingId: row.meeting_id,
+      type: row.type,
+      status: row.status,
+      startTime: row.start_time,
+      endTime: row.end_time,
+      isPasswordProtected: row.is_password_protected,
+      meetingPassword: row.meeting_password,
+      createdAt: row.created_at,
+    };
+  }
+
+  // --- Communities ---
+
+  async createCommunity(data: {
+    name: string;
+    description?: string;
+    isPrivate: boolean;
+    avatarUrl?: string;
+  }) {
+    const user = await this.requireAuth();
+
+    // Generate slug from name
+    const slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    const { data: community, error } = await supabase
+      .from('communities')
+      .insert({
+        creator_id: user.id,
+        name: data.name,
+        slug,
+        description: data.description,
+        avatar_url: data.avatarUrl,
+        is_private: data.isPrivate,
+      })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    // Auto-add creator as admin member
+    await supabase.from('community_members').insert({
+      community_id: community.id,
+      user_id: user.id,
+      role: 'admin',
+    });
+
+    const profile = await this.getProfileById(user.id);
+    return { data: this.mapCommunity(community, profile, true, 'admin') };
+  }
+
+  async getCommunities(type: 'public' | 'joined' | 'all' = 'public') {
+    const user = await this.getCurrentUser();
+
+    let query = supabase.from('communities').select('*, creator:profiles!creator_id(*)');
+
+    if (type === 'public') {
+      query = query.eq('is_private', false);
+    } else if (type === 'joined' && user) {
+      // Only get communities the user is a member of
+      const { data: memberships } = await supabase
+        .from('community_members')
+        .select('community_id')
+        .eq('user_id', user.id);
+
+      const communityIds = memberships?.map(m => m.community_id) || [];
+      if (communityIds.length === 0) {
+        return { data: [] };
+      }
+      query = query.in('id', communityIds);
+    }
+
+    const { data: communities, error } = await query.order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Check membership status for current user
+    let membershipMap = new Map<string, { isMember: boolean; role?: string }>();
+    if (user) {
+      const { data: userMemberships } = await supabase
+        .from('community_members')
+        .select('community_id, role')
+        .eq('user_id', user.id);
+
+      userMemberships?.forEach(m => {
+        membershipMap.set(m.community_id, { isMember: true, role: m.role });
+      });
+    }
+
+    return {
+      data: communities.map((c: any) => {
+        const membership = membershipMap.get(c.id) || { isMember: false };
+        const creatorProfile: User = {
+          id: c.creator.id,
+          username: c.creator.username,
+          email: c.creator.email || '',
+          avatar: c.creator.avatar_url,
+          isVerified: c.creator.is_verified || false,
+          isCelebrity: false,
+          followersCount: 0,
+          followingCount: 0,
+          postsCount: 0,
+          createdAt: c.creator.created_at,
+        };
+        return this.mapCommunity(c, creatorProfile, membership.isMember, membership.role);
+      }),
+    };
+  }
+
+  async getCommunityBySlug(slug: string) {
+    const user = await this.getCurrentUser();
+
+    const { data: community, error } = await supabase
+      .from('communities')
+      .select('*, creator:profiles!creator_id(*)')
+      .eq('slug', slug)
+      .single();
+
+    if (error) throw error;
+
+    // Check if user is a member
+    let isMember = false;
+    let userRole: string | undefined;
+    if (user) {
+      const { data: membership } = await supabase
+        .from('community_members')
+        .select('role')
+        .eq('community_id', community.id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (membership) {
+        isMember = true;
+        userRole = membership.role;
+      }
+    }
+
+    const creatorProfile = await this.getProfileById(community.creator_id);
+    return { data: this.mapCommunity(community, creatorProfile, isMember, userRole) };
+  }
+
+  async joinCommunity(communityId: string) {
+    const user = await this.requireAuth();
+
+    const { error } = await supabase.from('community_members').insert({
+      community_id: communityId,
+      user_id: user.id,
+      role: 'member',
+    });
+
+    if (error) throw error;
+    return { data: { success: true } };
+  }
+
+  async leaveCommunity(communityId: string) {
+    const user = await this.requireAuth();
+
+    const { error } = await supabase
+      .from('community_members')
+      .delete()
+      .eq('community_id', communityId)
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+    return { data: { success: true } };
+  }
+
+  async getCommunityMembers(communityId: string) {
+    const { data: members, error } = await supabase
+      .from('community_members')
+      .select('*, user:profiles!user_id(*)')
+      .eq('community_id', communityId)
+      .order('joined_at', { ascending: false });
+
+    if (error) throw error;
+
+    return {
+      data: members.map((m: any) => ({
+        id: m.id,
+        communityId: m.community_id,
+        userId: m.user_id,
+        role: m.role,
+        joinedAt: m.joined_at,
+        user: {
+          id: m.user.id,
+          username: m.user.username,
+          email: m.user.email || '',
+          avatar: m.user.avatar_url,
+          isVerified: m.user.is_verified || false,
+          isCelebrity: false,
+          followersCount: 0,
+          followingCount: 0,
+          postsCount: 0,
+          createdAt: m.user.created_at,
+        },
+      })),
+    };
+  }
+
+  async getCommunityPosts(communityId: string, limit = 20) {
+    const { data: posts, error } = await supabase
+      .from('posts')
+      .select('*')
+      .eq('community_id', communityId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    const userIds = [...new Set(posts.map(p => p.user_id))];
+    const profiles = await this.getProfilesByIds(userIds);
+    const profileMap = new Map(profiles.map(p => [p.id, p]));
+
+    return {
+      data: posts.map(p => this.mapPost(p, profileMap.get(p.user_id))),
+    };
+  }
+
+  private mapCommunity(row: any, creator: User, isMember: boolean = false, userRole?: string): any {
+    return {
+      id: row.id,
+      creatorId: row.creator_id,
+      creator,
+      name: row.name,
+      slug: row.slug,
+      description: row.description,
+      avatarUrl: row.avatar_url,
+      coverUrl: row.cover_url,
+      isPrivate: row.is_private,
+      membersCount: row.members_count,
+      postsCount: row.posts_count,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      isMember,
+      userRole,
+    };
+  }
+
+  // --- Coins / Rewards ---
+
+  async getCoinsBalance() {
+    const user = await this.requireAuth();
+    
+    const { data: wallet, error } = await supabase
+      .from('wallets')
+      .select('coins_balance')
+      .eq('user_id', user.id)
+      .single();
+
+    if (error) throw error;
+    return { data: { balance: wallet?.coins_balance || 0 } };
+  }
+
+  async getCoinTransactions(limit = 50) {
+    const user = await this.requireAuth();
+
+    const { data: transactions, error } = await supabase
+      .from('coin_transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return {
+      data: transactions.map((t: any) => ({
+        id: t.id,
+        userId: t.user_id,
+        amount: t.amount,
+        reason: t.reason,
+        createdAt: t.created_at,
+      })),
+    };
+  }
+
+  async earnCoins(amount: number, reason: string) {
+    const user = await this.requireAuth();
+
+    // Insert transaction
+    const { error: txError } = await supabase
+      .from('coin_transactions')
+      .insert({
+        user_id: user.id,
+        amount,
+        reason,
+      });
+
+    if (txError) throw txError;
+
+    // Update wallet balance
+    const { error: walletError } = await supabase.rpc('increment_coins', {
+      user_uuid: user.id,
+      coins_amount: amount,
+    });
+
+    if (walletError) {
+      // If wallet update fails, we should ideally rollback the transaction
+      console.error('Failed to update wallet:', walletError);
+      throw walletError;
+    }
+
+    return { data: { success: true, amount } };
+  }
+
+  async spendCoins(amount: number, reason: string) {
+    const user = await this.requireAuth();
+
+    // Check balance first
+    const { data: balanceData } = await this.getCoinsBalance();
+    if (balanceData.balance < amount) {
+      throw new Error('Insufficient coins balance');
+    }
+
+    // Insert transaction (negative amount)
+    const { error: txError } = await supabase
+      .from('coin_transactions')
+      .insert({
+        user_id: user.id,
+        amount: -amount,
+        reason,
+      });
+
+    if (txError) throw txError;
+
+    // Update wallet balance
+    const { error: walletError } = await supabase.rpc('increment_coins', {
+      user_uuid: user.id,
+      coins_amount: -amount,
+    });
+
+    if (walletError) {
+      console.error('Failed to update wallet:', walletError);
+      throw walletError;
+    }
+
+    return { data: { success: true, amount } };
+  }
+
+  // --- Ads ---
+
+  async createAd(data: {
+    title: string;
+    content: string;
+    mediaUrl?: string;
+    linkUrl?: string;
+    budgetRwf: number;
+    durationType: 'hour' | 'day' | 'month' | 'year';
+    startsAt: string;
+    expiresAt: string;
+  }) {
+    const user = await this.requireAuth();
+
+    const { data: ad, error } = await supabase
+      .from('ads')
+      .insert({
+        advertiser_id: user.id,
+        title: data.title,
+        content: data.content,
+        media_url: data.mediaUrl,
+        link_url: data.linkUrl,
+        budget_rwf: data.budgetRwf,
+        duration_type: data.durationType,
+        starts_at: data.startsAt,
+        expires_at: data.expiresAt,
+        status: 'pending',
+      })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    const profile = await this.getProfileById(user.id);
+    return { data: this.mapAd(ad, profile) };
+  }
+
+  async getMyAds() {
+    const user = await this.requireAuth();
+
+    const { data: ads, error } = await supabase
+      .from('ads')
+      .select('*')
+      .eq('advertiser_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const profile = await this.getProfileById(user.id);
+    return {
+      data: ads.map((ad: any) => this.mapAd(ad, profile)),
+    };
+  }
+
+  async getActiveAds(limit = 10) {
+    const { data: ads, error } = await supabase
+      .from('ads')
+      .select('*, advertiser:profiles!advertiser_id(*)')
+      .eq('status', 'active')
+      .lte('starts_at', new Date().toISOString())
+      .gte('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return {
+      data: ads.map((ad: any) => {
+        const advertiser: User = {
+          id: ad.advertiser.id,
+          username: ad.advertiser.username,
+          email: ad.advertiser.email || '',
+          avatar: ad.advertiser.avatar_url,
+          isVerified: ad.advertiser.is_verified || false,
+          isCelebrity: false,
+          followersCount: 0,
+          followingCount: 0,
+          postsCount: 0,
+          createdAt: ad.advertiser.created_at,
+        };
+        return this.mapAd(ad, advertiser);
+      }),
+    };
+  }
+
+  async incrementAdImpressions(adId: string) {
+    const { error } = await supabase.rpc('increment_ad_impressions', {
+      ad_uuid: adId,
+    });
+
+    if (error) console.error('Failed to increment impressions:', error);
+    return { data: { success: !error } };
+  }
+
+  async incrementAdClicks(adId: string) {
+    const { error } = await supabase.rpc('increment_ad_clicks', {
+      ad_uuid: adId,
+    });
+
+    if (error) console.error('Failed to increment clicks:', error);
+    return { data: { success: !error } };
+  }
+
+  async updateAdStatus(adId: string, status: 'active' | 'paused' | 'expired') {
+    const user = await this.requireAuth();
+
+    const { error } = await supabase
+      .from('ads')
+      .update({ status })
+      .eq('id', adId)
+      .eq('advertiser_id', user.id);
+
+    if (error) throw error;
+    return { data: { success: true } };
+  }
+
+  private mapAd(row: any, advertiser: User): any {
+    return {
+      id: row.id,
+      advertiserId: row.advertiser_id,
+      advertiser,
+      title: row.title,
+      content: row.content,
+      mediaUrl: row.media_url,
+      linkUrl: row.link_url,
+      budgetRwf: row.budget_rwf,
+      durationType: row.duration_type,
+      startsAt: row.starts_at,
+      expiresAt: row.expires_at,
+      status: row.status,
+      impressionsCount: row.impressions_count || 0,
+      clicksCount: row.clicks_count || 0,
+      createdAt: row.created_at,
+    };
+  }
 }
 
 export const apiClient = new ApiClient();
+

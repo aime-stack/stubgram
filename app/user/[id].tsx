@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   FlatList,
   Platform,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,19 +20,25 @@ import { PostCard } from '@/components/PostCard';
 import { User, Post } from '@/types';
 import { apiClient } from '@/services/api';
 import * as Haptics from 'expo-haptics';
+import { useAuthStore } from '@/stores/authStore';
+import { ImageModal } from '@/components/ImageModal';
 
 export default function UserProfileScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user: currentUser } = useAuthStore();
   const [user, setUser] = useState<User | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'posts' | 'media'>('posts');
+  const [isDataLoading, setIsDataLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'posts' | 'reels' | 'replies' | 'media' | 'likes'>('posts');
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+
+  const isMe = currentUser?.id === id;
 
   const loadUserProfile = useCallback(async () => {
     try {
-      // TODO: Backend Integration - Fetch user profile
       const response = await apiClient.getUserProfile(id);
       setUser(response.data);
       setIsFollowing(response.data.isFollowing || false);
@@ -42,40 +49,75 @@ export default function UserProfileScreen() {
     }
   }, [id]);
 
-  const loadUserPosts = useCallback(async () => {
-    try {
-      // TODO: Backend Integration - Fetch user posts
-      const response = await apiClient.getUserPosts(id);
-      setPosts(response.data.data);
-    } catch (error) {
-      console.error('Failed to load user posts:', error);
+  const loadTabData = useCallback(async (isInitial = false) => {
+    if (!id) return;
+    setIsDataLoading(true);
+
+    // Only clear posts if it's the initial load for a new user
+    if (isInitial) {
+      setPosts([]);
     }
-  }, [id]);
+
+    try {
+      let response;
+      switch (activeTab) {
+        case 'posts':
+          response = await apiClient.getUserPosts(id);
+          break;
+        case 'reels':
+          response = await apiClient.getUserPosts(id);
+          response.data = response.data.filter(p => p.type === 'reel');
+          break;
+        case 'replies':
+          response = await apiClient.getUserReplies(id);
+          break;
+        case 'media':
+          response = await apiClient.getUserMedia(id);
+          break;
+        case 'likes':
+          response = await apiClient.getUserLikes(id);
+          break;
+        default:
+          response = { data: [] };
+      }
+      setPosts(response.data);
+    } catch (error) {
+      console.error(`Failed to load ${activeTab}:`, error);
+    } finally {
+      setIsDataLoading(false);
+    }
+  }, [id, activeTab]);
 
   useEffect(() => {
     loadUserProfile();
-    loadUserPosts();
-  }, [id, loadUserProfile, loadUserPosts]);
+    loadTabData(true); // Initial load for this user
+  }, [id, loadUserProfile]);
+
+  useEffect(() => {
+    // Tab switch load (don't clear posts immediately to prevent pop)
+    if (!isLoading) {
+      loadTabData(false);
+    }
+  }, [activeTab]);
 
   const handleFollow = useCallback(async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setIsFollowing(!isFollowing);
-      
-      // TODO: Backend Integration - Follow/unfollow user
-      await apiClient.followUser(id);
-      
-      if (user) {
-        setUser({
-          ...user,
-          followersCount: isFollowing ? user.followersCount - 1 : user.followersCount + 1,
-        });
+
+      if (isFollowing) {
+        await apiClient.unfollowUser(id);
+      } else {
+        await apiClient.followUser(id);
       }
-    } catch (error) {
-      console.error('Failed to follow user:', error);
+
       setIsFollowing(!isFollowing);
+      // Re-fetch profile to get updated counts
+      await loadUserProfile();
+    } catch (error) {
+      console.error('Failed to toggle follow:', error);
+      Alert.alert('Error', 'Failed to update follow status');
     }
-  }, [isFollowing, id, user]);
+  }, [isFollowing, id, loadUserProfile]);
 
   const handleMessage = useCallback(() => {
     router.push(`/conversation/${id}`);
@@ -99,113 +141,96 @@ export default function UserProfileScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <IconSymbol
-            ios_icon_name="chevron.left"
-            android_material_icon_name="arrow_back"
-            size={24}
-            color={colors.text}
-          />
+      {/* Header Overlay */}
+      <View style={styles.headerOverlay}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
+          <IconSymbol ios_icon_name="chevron.left" android_material_icon_name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{user.username}</Text>
-        <TouchableOpacity style={styles.backButton}>
-          <IconSymbol
-            ios_icon_name="ellipsis"
-            android_material_icon_name="more_vert"
-            size={24}
-            color={colors.text}
-          />
+        <TouchableOpacity style={styles.headerIcon}>
+          <IconSymbol ios_icon_name="ellipsis" android_material_icon_name="more-vert" size={24} color="#FFF" />
         </TouchableOpacity>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[2]}
       >
-        {/* Profile Header */}
-        <View style={styles.profileHeader}>
+        {/* Cover Photo */}
+        <View style={styles.coverContainer}>
           <Image
-            source={{ uri: user.avatar || 'https://via.placeholder.com/100' }}
-            style={styles.avatar}
+            source={{ uri: user.coverPhoto || 'https://images.unsplash.com/photo-1557683316-973673baf926' }}
+            style={styles.coverPhoto}
           />
-          <View style={styles.nameContainer}>
-            <View style={styles.nameRow}>
-              <Text style={styles.username}>{user.username}</Text>
-              {user.isVerified && (
-                <IconSymbol
-                  ios_icon_name="checkmark.seal.fill"
-                  android_material_icon_name="verified"
-                  size={20}
-                  color={colors.primary}
-                />
+          <LinearGradient
+            colors={['rgba(0,0,0,0.4)', 'transparent']}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+
+        {/* Profile Info Section */}
+        <View style={styles.profileSection}>
+          <View style={styles.profileCard}>
+            <View style={styles.avatarRow}>
+              <Image
+                source={{ uri: user.avatar || 'https://via.placeholder.com/100' }}
+                style={styles.avatar}
+              />
+              {isMe && (
+                <TouchableOpacity
+                  style={styles.profileActionButton}
+                  onPress={() => router.push('/edit-profile')}
+                >
+                  <Text style={styles.profileActionButtonText}>Edit Profile</Text>
+                </TouchableOpacity>
               )}
-              {user.isCelebrity && (
-                <View style={styles.celebrityBadge}>
-                  <IconSymbol
-                    ios_icon_name="star.fill"
-                    android_material_icon_name="star"
-                    size={16}
-                    color={colors.accent}
-                  />
+              {!isMe && (
+                <View style={styles.otherUserActions}>
+                  <TouchableOpacity
+                    style={[styles.profileActionButton, isFollowing && styles.followingButton]}
+                    onPress={handleFollow}
+                  >
+                    <Text style={[styles.profileActionButtonText, isFollowing && styles.followingButtonText]}>
+                      {isFollowing ? 'Following' : 'Follow'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.roundActionButton} onPress={handleMessage}>
+                    <IconSymbol ios_icon_name="envelope" android_material_icon_name="mail-outline" size={20} color={colors.text} />
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
-            {user.bio && <Text style={styles.bio}>{user.bio}</Text>}
-          </View>
 
-          {/* Stats */}
-          <View style={styles.stats}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{user.postsCount}</Text>
-              <Text style={styles.statLabel}>Posts</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.statItem}
-              onPress={() => router.push(`/followers/${id}`)}
-            >
-              <Text style={styles.statValue}>{user.followersCount}</Text>
-              <Text style={styles.statLabel}>Followers</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.statItem}
-              onPress={() => router.push(`/following/${id}`)}
-            >
-              <Text style={styles.statValue}>{user.followingCount}</Text>
-              <Text style={styles.statLabel}>Following</Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.nameContainer}>
+              <View style={styles.nameRow}>
+                <Text style={styles.username}>{user.full_name || user.username}</Text>
+                {user.isVerified && (
+                  <IconSymbol ios_icon_name="checkmark.seal.fill" android_material_icon_name="verified" size={20} color={colors.primary} />
+                )}
+              </View>
+              <Text style={styles.handle}>@{user.username.toLowerCase()}</Text>
 
-          {/* Action Buttons */}
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.followButton]}
-              onPress={handleFollow}
-            >
-              <LinearGradient
-                colors={isFollowing ? [colors.card, colors.card] : [colors.primary, colors.secondary]}
-                style={styles.buttonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Text style={[styles.actionButtonText, isFollowing && styles.followingText]}>
-                  {isFollowing ? 'Following' : 'Follow'}
+              {user.bio && <Text style={styles.bio}>{user.bio}</Text>}
+
+              <View style={styles.joinDate}>
+                <IconSymbol ios_icon_name="calendar" android_material_icon_name="calendar-today" size={14} color={colors.textSecondary} />
+                <Text style={styles.joinDateText}>
+                  Joined {new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                 </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.messageButton]}
-              onPress={handleMessage}
-            >
-              <IconSymbol
-                ios_icon_name="message"
-                android_material_icon_name="chat"
-                size={20}
-                color={colors.text}
-              />
-              <Text style={styles.messageButtonText}>Message</Text>
-            </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Stats */}
+            <View style={styles.statsRow}>
+              <TouchableOpacity style={styles.statItem} onPress={() => router.push(`/user/following/${id}` as any)}>
+                <Text style={styles.statValue}>{user.followingCount}</Text>
+                <Text style={styles.statLabel}>Following</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.statItem} onPress={() => router.push(`/user/followers/${id}` as any)}>
+                <Text style={styles.statValue}>{user.followersCount}</Text>
+                <Text style={styles.statLabel}>Followers</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -215,45 +240,93 @@ export default function UserProfileScreen() {
             style={[styles.tab, activeTab === 'posts' && styles.tabActive]}
             onPress={() => setActiveTab('posts')}
           >
-            <IconSymbol
-              ios_icon_name="square.grid.2x2"
-              android_material_icon_name="grid_view"
-              size={24}
-              color={activeTab === 'posts' ? colors.primary : colors.textSecondary}
-            />
+            <Text style={[styles.tabText, activeTab === 'posts' && styles.tabTextActive]}>Posts</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'reels' && styles.tabActive]}
+            onPress={() => setActiveTab('reels')}
+          >
+            <Text style={[styles.tabText, activeTab === 'reels' && styles.tabTextActive]}>Reels</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'replies' && styles.tabActive]}
+            onPress={() => setActiveTab('replies')}
+          >
+            <Text style={[styles.tabText, activeTab === 'replies' && styles.tabTextActive]}>Replies</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'media' && styles.tabActive]}
             onPress={() => setActiveTab('media')}
           >
-            <IconSymbol
-              ios_icon_name="photo"
-              android_material_icon_name="photo_library"
-              size={24}
-              color={activeTab === 'media' ? colors.primary : colors.textSecondary}
-            />
+            <Text style={[styles.tabText, activeTab === 'media' && styles.tabTextActive]}>Media</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'likes' && styles.tabActive]}
+            onPress={() => setActiveTab('likes')}
+          >
+            <Text style={[styles.tabText, activeTab === 'likes' && styles.tabTextActive]}>Likes</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Posts */}
-        <View style={styles.postsContainer}>
-          {posts.length === 0 ? (
+        {/* Posts/Reels Content */}
+        <View style={activeTab === 'reels' ? styles.reelsGrid : styles.postsContainer}>
+          {isDataLoading ? (
+            <View style={styles.tabLoading}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : posts.length === 0 ? (
             <View style={styles.emptyState}>
               <IconSymbol
                 ios_icon_name="photo.on.rectangle.angled"
-                android_material_icon_name="photo_library"
+                android_material_icon_name="photo-library"
                 size={64}
                 color={colors.textSecondary}
               />
-              <Text style={styles.emptyText}>No posts yet</Text>
+              <Text style={styles.emptyText}>No {activeTab} yet</Text>
+            </View>
+          ) : (activeTab === 'reels' || activeTab === 'media') ? (
+            <View style={styles.reelsGrid}>
+              {posts.map((post, index) => {
+                const isReel = post.type === 'reel' || post.type === 'video';
+                return (
+                  <TouchableOpacity
+                    key={`${activeTab}-${post.id || index}-${index}`}
+                    style={styles.reelThumbnailContainer}
+                    onPress={() => {
+                      if (isReel) {
+                        router.push({ pathname: '/(drawer)/(tabs)/reels', params: { id: post.id } });
+                      } else {
+                        setSelectedImageUrl(post.mediaUrl || null);
+                      }
+                    }}
+                  >
+                    <Image
+                      source={{ uri: post.thumbnailUrl || post.mediaUrl || 'https://via.placeholder.com/150' }}
+                      style={styles.reelThumbnail}
+                    />
+                    {isReel && (
+                      <View style={styles.reelViews}>
+                        <IconSymbol ios_icon_name="play.fill" android_material_icon_name="play-arrow" size={12} color="#FFF" />
+                        <Text style={styles.reelViewsText}>{post.viewsCount || 0}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ) : (
             posts.map((post, index) => (
-              <PostCard key={index} post={post} />
+              <PostCard key={`${activeTab}-${post.id}-${index}`} post={post} />
             ))
           )}
         </View>
       </ScrollView>
+
+      <ImageModal
+        visible={!!selectedImageUrl}
+        imageUrl={selectedImageUrl || ''}
+        onClose={() => setSelectedImageUrl(null)}
+      />
     </View>
   );
 }
@@ -263,142 +336,161 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
+  headerOverlay: {
+    position: 'absolute',
+    top: spacing.md,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingTop: Platform.OS === 'android' ? spacing.xxl + 20 : spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    zIndex: 10,
+    paddingTop: Platform.OS === 'ios' ? 40 : spacing.md,
   },
-  backButton: {
-    width: 40,
-    height: 40,
+  headerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.3)', // Lighter icon background for light theme
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
-    ...typography.h3,
-    color: colors.text,
-  },
-  scrollContent: {
-    paddingBottom: 120,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  errorText: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  profileHeader: {
-    padding: spacing.lg,
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  coverContainer: {
+    height: 160,
+    width: '100%',
     backgroundColor: colors.border,
+  },
+  coverPhoto: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  profileSection: {
+    // Removed marginTop: -40 as profileCard now handles it
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 12,
+  },
+  profileCard: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    marginTop: -40,
+    marginHorizontal: spacing.md,
+    ...shadows.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
     marginBottom: spacing.md,
   },
+  avatar: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    borderWidth: 4,
+    borderColor: colors.background,
+    backgroundColor: colors.border,
+  },
+  headerActions: {
+    paddingBottom: 4,
+  },
+  otherUserActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  profileActionButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 8,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  profileActionButtonText: {
+    fontWeight: '700',
+    fontSize: 14,
+    color: colors.text,
+  },
+  followingButton: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  followingButtonText: {
+    color: '#FFF',
+  },
+  roundActionButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   nameContainer: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    marginBottom: spacing.xs,
+    gap: 4,
   },
   username: {
-    ...typography.h2,
+    fontSize: 22,
+    fontWeight: '800',
     color: colors.text,
   },
-  celebrityBadge: {
-    backgroundColor: `${colors.accent}20`,
-    borderRadius: borderRadius.full,
-    padding: spacing.xs,
+  handle: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   bio: {
-    ...typography.body,
+    fontSize: 15,
+    color: colors.text,
+    lineHeight: 20,
+    marginBottom: spacing.sm,
+  },
+  joinDate: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  joinDateText: {
+    fontSize: 13,
     color: colors.textSecondary,
   },
-  stats: {
+  statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: spacing.lg,
-    paddingVertical: spacing.md,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.border,
+    gap: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
   },
   statItem: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
   },
   statValue: {
-    ...typography.h3,
+    fontWeight: '700',
+    fontSize: 15,
     color: colors.text,
-    marginBottom: spacing.xs,
   },
   statLabel: {
-    ...typography.caption,
+    fontSize: 15,
     color: colors.textSecondary,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  actionButton: {
-    flex: 1,
-    borderRadius: borderRadius.md,
-    overflow: 'hidden',
-  },
-  followButton: {
-    flex: 2,
-  },
-  buttonGradient: {
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionButtonText: {
-    ...typography.body,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  followingText: {
-    color: colors.text,
-  },
-  messageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.md,
-  },
-  messageButtonText: {
-    ...typography.body,
-    color: colors.text,
-    fontWeight: '600',
   },
   tabs: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: colors.background,
   },
   tab: {
     flex: 1,
@@ -410,16 +502,75 @@ const styles = StyleSheet.create({
   tabActive: {
     borderBottomColor: colors.primary,
   },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  tabTextActive: {
+    color: colors.text,
+    fontWeight: '700',
+  },
   postsContainer: {
-    padding: spacing.md,
+    flex: 1,
+  },
+  tabLoading: {
+    padding: spacing.xxl,
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: spacing.xxl * 2,
+    padding: spacing.xxl,
   },
   emptyText: {
-    ...typography.body,
     color: colors.textSecondary,
     marginTop: spacing.md,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: colors.textSecondary,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+  },
+  reelsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 1,
+  },
+  reelThumbnailContainer: {
+    width: '33.33%',
+    aspectRatio: 9 / 16,
+    padding: 1,
+    position: 'relative',
+  },
+  reelThumbnail: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.border,
+  },
+  reelViews: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  reelViewsText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });

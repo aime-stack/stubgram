@@ -12,6 +12,7 @@ class SocketService {
   private socket: Socket | null = null;
   private messageHandlers: Map<string, MessageHandler> = new Map();
   private typingHandlers: Map<string, TypingHandler> = new Map();
+  private walletHandlers: Map<string, (data: any) => void> = new Map();
 
   async connect() {
     if (this.socket?.connected) {
@@ -21,7 +22,7 @@ class SocketService {
 
     try {
       const token = await SecureStore.getItemAsync('accessToken');
-      
+
       // TODO: Backend Integration - Connect to WebSocket server with authentication
       this.socket = io(WS_URL, {
         auth: {
@@ -61,6 +62,14 @@ class SocketService {
         if (handler) {
           handler(data);
         }
+      });
+
+      // Listen for wallet updates
+      this.socket.on('wallet_update', (data) => {
+        console.log('Wallet update received:', data);
+        // We can use a global emitter or a specific handler
+        const handler = this.walletHandlers.get('update');
+        if (handler) handler(data);
       });
 
     } catch (error) {
@@ -123,6 +132,14 @@ class SocketService {
 
   offTyping(conversationId: string) {
     this.typingHandlers.delete(conversationId);
+  }
+
+  onWalletUpdate(handler: (data: any) => void) {
+    this.walletHandlers.set('update', handler);
+  }
+
+  offWalletUpdate() {
+    this.walletHandlers.delete('update');
   }
 }
 

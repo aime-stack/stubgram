@@ -11,12 +11,15 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
 import { useAuthStore } from '@/stores/authStore';
 import { IconSymbol } from '@/components/IconSymbol';
+
+const SG_LOGO = require('@/assets/images/stubgram-icon.png');
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -63,19 +66,13 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <LinearGradient
-            colors={[colors.primary, colors.secondary]}
-            style={styles.logoContainer}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <IconSymbol
-              ios_icon_name="sparkles"
-              android_material_icon_name="stars"
-              size={48}
-              color="#FFFFFF"
+          <View style={styles.logoContainer}>
+            <Image
+              source={SG_LOGO}
+              style={styles.logo}
+              resizeMode="contain"
             />
-          </LinearGradient>
+          </View>
           <Text style={styles.title}>Welcome Back</Text>
           <Text style={styles.subtitle}>Sign in to continue</Text>
         </View>
@@ -200,12 +197,23 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+    padding: spacing.sm,
+  },
+  logo: {
+    width: '100%',
+    height: '100%',
   },
   title: {
     ...typography.h1,

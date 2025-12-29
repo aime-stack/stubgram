@@ -17,6 +17,7 @@ import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import { PremiumHeader } from '@/components/PremiumHeader';
 import { useAuthStore } from '@/stores/authStore';
 import { useWalletStore } from '@/stores/walletStore';
 import { apiClient } from '@/services/api';
@@ -159,20 +160,13 @@ export default function CelebritiesScreen() {
     );
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            <Stack.Screen
-                options={{
-                    title: 'VIP Celebrity Chat',
-                    headerShown: true,
-                    headerStyle: { backgroundColor: colors.background },
-                    headerTintColor: colors.text,
-                }}
+        <View style={styles.container}>
+            <PremiumHeader 
+                title="Celebrity VIP Chat" 
+                subtitle="Chat directly with your favorite stars"
+                iosIconName="star.fill"
+                androidIconName="star"
             />
-
-            <View style={styles.headerBanner}>
-                <IconSymbol ios_icon_name="star.fill" android_material_icon_name="star" size={24} color="#FFD700" />
-                <Text style={styles.bannerText}>Chat directly with your favorite celebrities!</Text>
-            </View>
 
             {isLoading ? (
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -275,7 +269,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     priceLabel: {
-        ...typography.small,
+        ...typography.caption,
         color: colors.textSecondary,
         marginBottom: 2,
     },

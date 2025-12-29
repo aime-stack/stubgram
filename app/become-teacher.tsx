@@ -11,11 +11,10 @@ import {
     Platform,
     KeyboardAvoidingView,
 } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
+import { useRouter } from 'expo-router';
+import { colors, spacing, borderRadius, typography, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import { PremiumHeader } from '@/components/PremiumHeader';
 import { apiClient } from '@/services/api';
 import * as Haptics from 'expo-haptics';
 
@@ -34,7 +33,6 @@ const EXPERTISE_OPTIONS = [
 
 export default function TeacherApplicationScreen() {
     const router = useRouter();
-    const insets = useSafeAreaInsets();
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [existingApplication, setExistingApplication] = useState<any>(null);
@@ -114,17 +112,14 @@ export default function TeacherApplicationScreen() {
         );
     }
 
-    // Show existing application status
     if (existingApplication) {
         return (
             <View style={styles.container}>
-                <Stack.Screen
-                    options={{
-                        title: 'Teacher Application',
-                        headerShown: true,
-                        headerStyle: { backgroundColor: colors.background },
-                        headerTintColor: colors.text,
-                    }}
+                <PremiumHeader 
+                    title="Teacher Application" 
+                    subtitle="Application Status"
+                    iosIconName="graduationcap.fill"
+                    androidIconName="school"
                 />
                 <View style={styles.statusContainer}>
                     <View style={[
@@ -168,20 +163,13 @@ export default function TeacherApplicationScreen() {
                             style={styles.createButton}
                             onPress={() => router.push('/create-course')}
                         >
-                            <LinearGradient
-                                colors={[colors.primary, colors.secondary]}
-                                style={styles.createButtonGradient}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                            >
-                                <IconSymbol
-                                    ios_icon_name="plus.circle.fill"
-                                    android_material_icon_name="add-circle"
-                                    size={24}
-                                    color="#FFFFFF"
-                                />
-                                <Text style={styles.createButtonText}>Create Your First Course</Text>
-                            </LinearGradient>
+                            <IconSymbol
+                                ios_icon_name="plus.circle.fill"
+                                android_material_icon_name="add-circle"
+                                size={24}
+                                color="#FFFFFF"
+                            />
+                            <Text style={styles.createButtonText}>Create Your First Course</Text>
                         </TouchableOpacity>
                     )}
                 </View>
@@ -191,137 +179,110 @@ export default function TeacherApplicationScreen() {
 
     return (
         <View style={styles.container}>
-            <Stack.Screen
-                options={{
-                    title: 'Become a Teacher',
-                    headerShown: true,
-                    headerStyle: { backgroundColor: colors.background },
-                    headerTintColor: colors.text,
-                }}
+            <PremiumHeader 
+                title="Become a Teacher" 
+                subtitle="Share your knowledge and earn"
+                iosIconName="graduationcap.fill"
+                androidIconName="school"
             />
 
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
             >
                 <ScrollView
                     style={styles.content}
                     showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+                    contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
                 >
-                    <View style={styles.header}>
-                        <IconSymbol
-                            ios_icon_name="graduationcap.fill"
-                            android_material_icon_name="school"
-                            size={48}
-                            color={colors.primary}
-                        />
-                        <Text style={styles.headerTitle}>Share Your Knowledge</Text>
-                        <Text style={styles.headerSubtitle}>
-                            Apply to become a teacher and create courses to share with our community.
-                        </Text>
-                    </View>
-
-                    {/* YouTube Channel */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>YouTube Channel URL *</Text>
-                        <Text style={styles.hint}>
-                            Your videos will be embedded from your YouTube channel
-                        </Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="https://youtube.com/@yourchannel"
-                            placeholderTextColor={colors.textSecondary}
-                            value={youtubeChannel}
-                            onChangeText={setYoutubeChannel}
-                            autoCapitalize="none"
-                            keyboardType="url"
-                        />
-                    </View>
-
-                    {/* Bio */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>About You *</Text>
-                        <Text style={styles.hint}>
-                            Tell us about your background and teaching experience (min 50 chars)
-                        </Text>
-                        <TextInput
-                            style={[styles.input, styles.textArea]}
-                            placeholder="I'm a software engineer with 5 years of experience..."
-                            placeholderTextColor={colors.textSecondary}
-                            value={bio}
-                            onChangeText={setBio}
-                            multiline
-                            numberOfLines={4}
-                            textAlignVertical="top"
-                        />
-                        <Text style={styles.charCount}>{bio.length}/50+</Text>
-                    </View>
-
-                    {/* Expertise */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Areas of Expertise *</Text>
-                        <Text style={styles.hint}>Select all that apply</Text>
-                        <View style={styles.expertiseGrid}>
-                            {EXPERTISE_OPTIONS.map(exp => (
-                                <TouchableOpacity
-                                    key={exp}
-                                    style={[
-                                        styles.expertiseChip,
-                                        selectedExpertise.includes(exp) && styles.expertiseChipSelected,
-                                    ]}
-                                    onPress={() => toggleExpertise(exp)}
-                                >
-                                    <Text style={[
-                                        styles.expertiseChipText,
-                                        selectedExpertise.includes(exp) && styles.expertiseChipTextSelected,
-                                    ]}>
-                                        {exp}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
+                    <View style={styles.formCard}>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>YouTube Channel URL *</Text>
+                            <Text style={styles.hint}>
+                                Your videos will be embedded from your YouTube channel
+                            </Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="https://youtube.com/@yourchannel"
+                                placeholderTextColor={colors.textSecondary}
+                                value={youtubeChannel}
+                                onChangeText={setYoutubeChannel}
+                                autoCapitalize="none"
+                                keyboardType="url"
+                            />
                         </View>
-                    </View>
 
-                    {/* Sample Content URL */}
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Sample Content URL (Optional)</Text>
-                        <Text style={styles.hint}>
-                            Link to a video, blog post, or any content you've created
-                        </Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="https://..."
-                            placeholderTextColor={colors.textSecondary}
-                            value={sampleUrl}
-                            onChangeText={setSampleUrl}
-                            autoCapitalize="none"
-                            keyboardType="url"
-                        />
-                    </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>About You *</Text>
+                            <Text style={styles.hint}>
+                                Tell us about your background and teaching experience (min 50 chars)
+                            </Text>
+                            <TextInput
+                                style={[styles.input, styles.textArea]}
+                                placeholder="I'm a software engineer with 5 years of experience..."
+                                placeholderTextColor={colors.textSecondary}
+                                value={bio}
+                                onChangeText={setBio}
+                                multiline
+                                numberOfLines={4}
+                                textAlignVertical="top"
+                            />
+                            <Text style={styles.charCount}>{bio.length}/50+</Text>
+                        </View>
 
-                    {/* Submit Button */}
-                    <TouchableOpacity
-                        style={styles.submitButton}
-                        onPress={handleSubmit}
-                        disabled={isSubmitting}
-                    >
-                        <LinearGradient
-                            colors={[colors.primary, colors.secondary]}
-                            style={styles.submitButtonGradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Areas of Expertise *</Text>
+                            <Text style={styles.hint}>Select all that apply</Text>
+                            <View style={styles.expertiseGrid}>
+                                {EXPERTISE_OPTIONS.map(exp => (
+                                    <TouchableOpacity
+                                        key={exp}
+                                        style={[
+                                            styles.expertiseChip,
+                                            selectedExpertise.includes(exp) && styles.expertiseChipSelected,
+                                        ]}
+                                        onPress={() => toggleExpertise(exp)}
+                                    >
+                                        <Text style={[
+                                            styles.expertiseChipText,
+                                            selectedExpertise.includes(exp) && styles.expertiseChipTextSelected,
+                                        ]}>
+                                            {exp}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Sample Content URL (Optional)</Text>
+                            <Text style={styles.hint}>
+                                Link to a video, blog post, or any content you've created
+                            </Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="https://..."
+                                placeholderTextColor={colors.textSecondary}
+                                value={sampleUrl}
+                                onChangeText={setSampleUrl}
+                                autoCapitalize="none"
+                                keyboardType="url"
+                            />
+                        </View>
+
+                        <TouchableOpacity
+                            style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+                            onPress={handleSubmit}
+                            disabled={isSubmitting}
                         >
                             {isSubmitting ? (
-                                <ActivityIndicator color="#FFFFFF" />
+                                <ActivityIndicator color="#FFFFFF" size="small" />
                             ) : (
                                 <Text style={styles.submitButtonText}>Submit Application</Text>
                             )}
-                        </LinearGradient>
-                    </TouchableOpacity>
-
-                    <View style={{ height: spacing.xxl }} />
+                        </TouchableOpacity>
+                    </View>
                 </ScrollView>
             </KeyboardAvoidingView>
         </View>
@@ -341,43 +302,33 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
-        padding: spacing.md,
     },
-    header: {
-        alignItems: 'center',
-        paddingVertical: spacing.xl,
-    },
-    headerTitle: {
-        ...typography.h2,
-        color: colors.text,
-        marginTop: spacing.md,
-        marginBottom: spacing.sm,
-    },
-    headerSubtitle: {
-        ...typography.body,
-        color: colors.textSecondary,
-        textAlign: 'center',
-        lineHeight: 22,
+    formCard: {
+        backgroundColor: colors.card,
+        padding: spacing.lg,
+        borderRadius: borderRadius.md,
+        gap: spacing.md,
+        ...shadows.sm,
     },
     inputGroup: {
-        marginBottom: spacing.lg,
+        marginBottom: spacing.md,
     },
     label: {
         ...typography.body,
-        fontWeight: '600',
+        fontWeight: '700',
         color: colors.text,
         marginBottom: spacing.xs,
     },
     hint: {
-        ...typography.small,
+        ...typography.caption,
         color: colors.textSecondary,
         marginBottom: spacing.sm,
     },
     input: {
-        backgroundColor: colors.card,
+        backgroundColor: colors.background,
         borderWidth: 1,
         borderColor: colors.border,
-        borderRadius: borderRadius.md,
+        borderRadius: borderRadius.sm,
         padding: spacing.md,
         ...typography.body,
         color: colors.text,
@@ -387,7 +338,7 @@ const styles = StyleSheet.create({
         textAlignVertical: 'top',
     },
     charCount: {
-        ...typography.small,
+        ...typography.caption,
         color: colors.textSecondary,
         textAlign: 'right',
         marginTop: spacing.xs,
@@ -400,7 +351,7 @@ const styles = StyleSheet.create({
     expertiseChip: {
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
-        backgroundColor: colors.card,
+        backgroundColor: colors.background,
         borderWidth: 1,
         borderColor: colors.border,
         borderRadius: borderRadius.full,
@@ -415,28 +366,29 @@ const styles = StyleSheet.create({
     },
     expertiseChipTextSelected: {
         color: '#FFFFFF',
-        fontWeight: '600',
+        fontWeight: '700',
     },
     submitButton: {
-        marginTop: spacing.lg,
-        borderRadius: borderRadius.md,
-        overflow: 'hidden',
-    },
-    submitButtonGradient: {
+        backgroundColor: colors.primary,
         paddingVertical: spacing.md,
+        borderRadius: borderRadius.md,
         alignItems: 'center',
-        justifyContent: 'center',
+        marginTop: spacing.md,
+    },
+    submitButtonDisabled: {
+        opacity: 0.6,
     },
     submitButtonText: {
         ...typography.body,
         color: '#FFFFFF',
-        fontWeight: '600',
+        fontWeight: '700',
     },
     statusContainer: {
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
         padding: spacing.xl,
+        backgroundColor: colors.background,
     },
     statusBadge: {
         marginBottom: spacing.lg,
@@ -457,19 +409,17 @@ const styles = StyleSheet.create({
         marginBottom: spacing.xl,
     },
     createButton: {
-        borderRadius: borderRadius.md,
-        overflow: 'hidden',
-    },
-    createButtonGradient: {
-        flexDirection: 'row',
+        backgroundColor: colors.primary,
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.xl,
+        borderRadius: borderRadius.md,
+        flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.sm,
     },
     createButtonText: {
         ...typography.body,
         color: '#FFFFFF',
-        fontWeight: '600',
+        fontWeight: '700',
     },
 });

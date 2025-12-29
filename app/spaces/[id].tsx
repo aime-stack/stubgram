@@ -46,11 +46,17 @@ export default function SpaceRoomScreen() {
             setIsConnecting(true);
 
             // 1. Generate token via Edge Function
+            console.log('[SpaceRoomScreen] Generating token for space:', spaceId);
             const { data, error } = await supabase.functions.invoke('generate-token', {
                 body: { spaceId },
             });
 
-            if (error) throw error;
+            console.log('[SpaceRoomScreen] generate-token response:', { data, error });
+
+            if (error) {
+                console.error('[SpaceRoomScreen] generate-token logic error:', error);
+                throw error;
+            }
 
             // 2. Connect to LiveKit
             const connectedRoom = await livekitService.connect(data.wsUrl, data.token);
@@ -71,9 +77,29 @@ export default function SpaceRoomScreen() {
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error: any) {
-            console.error('Connection error:', error);
+            console.error('Connection error raw:', error);
+
+            let errorMessage = error.message || 'Could not join.';
+
+            // Try to extract Supabase Edge Function error body if available
+            try {
+                if (error instanceof Error && 'context' in error) {
+                    // @ts-ignore
+                    const body = await error.context?.json();
+                    if (body?.error) {
+                        errorMessage = body.error;
+                    }
+                }
+            } catch (e) {
+                // Failed to parse context
+            }
+
+            console.error('Connection error resolved:', errorMessage);
+
             if (network.isConnected) {
-                Alert.alert('Connection Failed', error.message || 'Could not join.');
+                Alert.alert('Connection Failed', errorMessage);
+                // Only go back if it's a fatal error, not a retryable one? 
+                // For now, keep existing behavior but better message.
                 router.back();
             }
         } finally {

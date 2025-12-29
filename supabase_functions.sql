@@ -1,5 +1,5 @@
 -- =====================================================
--- SNAPGRAM DATABASE FUNCTIONS
+-- StubGram DATABASE FUNCTIONS
 -- Run this in Supabase Dashboard > SQL Editor
 -- =====================================================
 
@@ -54,3 +54,4 @@ DO $$
 BEGIN
   RAISE NOTICE 'Database functions created successfully!';
 END $$;
+

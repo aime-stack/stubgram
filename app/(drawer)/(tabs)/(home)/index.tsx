@@ -48,10 +48,10 @@ export default function HomeScreen() {
   const [stories, setStories] = useState<Story[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [page, setPage] = useState(1);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
 
-  const loadFeed = useCallback(async (pageNum = 1, refresh = false) => {
+  const loadFeed = useCallback(async (currentCursor: string | null = null, refresh = false) => {
     try {
       if (refresh) {
         setIsRefreshing(true);
@@ -60,21 +60,21 @@ export default function HomeScreen() {
       }
 
       // Fetch personalized feed from Supabase
-      const response = await apiClient.getFeed(pageNum, 10);
+      const response = await apiClient.getFeed(currentCursor || undefined, 10);
       const newPosts = response.data || [];
 
-      if (refresh || pageNum === 1) {
+      if (refresh || !currentCursor) {
         setPosts(newPosts);
       } else {
         setPosts((prevPosts) => [...prevPosts, ...newPosts]);
       }
 
       setHasMore(response.hasMore ?? false);
-      setPage(pageNum);
+      setCursor(response.nextCursor || null);
     } catch (error) {
       console.error('Failed to load feed:', error);
       // Show mock data for development
-      if (pageNum === 1) {
+      if (!currentCursor) {
         setPosts(getMockPosts());
       }
     } finally {
@@ -113,16 +113,16 @@ export default function HomeScreen() {
   }, [isAuthenticated, authLoading, loadFeed, loadStories, loadAds]);
 
   const handleRefresh = useCallback(() => {
-    loadFeed(1, true);
+    loadFeed(null, true);
     loadStories();
     loadAds();
   }, [loadFeed, loadStories, loadAds]);
 
   const handleLoadMore = useCallback(() => {
-    if (!isLoading && hasMore) {
-      loadFeed(page + 1);
+    if (!isLoading && hasMore && cursor) {
+      loadFeed(cursor);
     }
-  }, [isLoading, hasMore, page, loadFeed]);
+  }, [isLoading, hasMore, cursor, loadFeed]);
 
   const handleCreatePost = useCallback(() => {
     router.push('/create-post');
@@ -180,18 +180,18 @@ export default function HomeScreen() {
   ), []);
 
   const renderFooter = useCallback(() => {
-    if (!isLoading || page === 1) return null;
+    if (!isLoading || !cursor) return null;
     return (
       <View style={styles.footer}>
-        <ActivityIndicator color={colors.primary} />
+        <ActivityIndicator color={themeColors.primary} />
       </View>
     );
-  }, [isLoading, page]);
+  }, [isLoading, cursor, themeColors.primary]);
 
-  if (authLoading || (isLoading && page === 1)) {
+  if (authLoading || (isLoading && !cursor)) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={themeColors.primary} />
       </View>
     );
   }
@@ -210,16 +210,30 @@ export default function HomeScreen() {
           />
         </TouchableOpacity>
 
-        <Text style={[styles.logoText, { color: themeColors.text }]}>SnapGram</Text>
+        <View style={styles.brandingContainer}>
+          <Text style={[styles.brandingText, { color: themeColors.text }]}>Stubgram</Text>
+        </View>
 
-        <TouchableOpacity onPress={() => console.log('Notifications')}>
-          <IconSymbol
-            ios_icon_name="bell"
-            android_material_icon_name="notifications-none"
-            size={26}
-            color={themeColors.text}
-          />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={() => router.push('/camera')} style={styles.iconButton}>
+            <IconSymbol
+              ios_icon_name="camera"
+              android_material_icon_name="photo-camera"
+              size={24}
+              color={themeColors.text}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => console.log('Notifications')} style={[styles.iconButton, { marginLeft: spacing.xs }]}>
+            <IconSymbol
+              ios_icon_name="bell"
+              android_material_icon_name="notifications-none"
+              size={24}
+              color={themeColors.text}
+            />
+            {/* Notification badge if needed */}
+            <View style={styles.badge} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -360,22 +374,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
     backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
     zIndex: 10,
   },
   avatarButton: {
     padding: 4,
+    width: 44,
   },
   headerAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: colors.border,
   },
+  brandingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandingText: {
+    ...typography.branding,
+    fontWeight: '800',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    width: 44,
+  },
+  iconButton: {
+    padding: 4,
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF3B30',
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+  },
   listContainer: {
-    padding: spacing.md,
-    paddingTop: spacing.md,
     paddingBottom: 120,
   },
   loadingContainer: {
@@ -407,7 +450,7 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: spacing.lg,
-    bottom: 100,
+    bottom: 110,
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -419,11 +462,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
-  },
-  logoText: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
-    letterSpacing: -0.5,
   },
 });

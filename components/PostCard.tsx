@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Post } from '@/types';
-import { spacing, borderRadius, typography, colors } from '@/styles/commonStyles';
+import { spacing, borderRadius, typography, colors, useThemedStyles } from '@/styles/commonStyles';
 import { useThemeStore, darkColors, lightColors } from '@/stores/themeStore';
 import { IconSymbol } from '@/components/IconSymbol';
 import { apiClient } from '@/services/api';
@@ -29,7 +29,7 @@ interface PostCardProps {
 }
 
 // Helper to render content with clickable hashtags
-const renderContentWithHashtags = (content: string, router: any) => {
+const renderContentWithHashtags = (content: string, router: any, themeColors: any) => {
   const parts = content.split(/(#\w+)/g);
 
   return parts.map((part, index) => {
@@ -48,7 +48,7 @@ const renderContentWithHashtags = (content: string, router: any) => {
         </Text>
       );
     }
-    return <Text key={index}>{part}</Text>;
+    return <Text key={index} style={{ color: themeColors.text }}>{part}</Text>;
   });
 };
 
@@ -58,6 +58,7 @@ export function PostCard({ post, onLike, onComment, onShare }: PostCardProps) {
   const { addCoins } = useWalletStore();
   const { isDark } = useThemeStore();
   const themeColors = isDark ? darkColors : lightColors;
+  const themedStyles = useThemedStyles(createStyles);
 
   const [isLiked, setIsLiked] = useState(post.isLiked);
   const [likesCount, setLikesCount] = useState(post.likesCount);
@@ -121,7 +122,7 @@ export function PostCard({ post, onLike, onComment, onShare }: PostCardProps) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       await Share.share({
         message: `Check out this post by @${post.user.username}: ${post.content}`,
-        url: `https://snapgram.app/post/${post.id}`,
+        url: `https://Stubgram.app/post/${post.id}`,
       });
       // Award coins for sharing
       addCoins(2, 'Shared a post');
@@ -180,196 +181,231 @@ export function PostCard({ post, onLike, onComment, onShare }: PostCardProps) {
   };
 
   return (
-    <TouchableOpacity
-      style={[styles.container, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}
-      onPress={() => router.push(`/post/${post.id}`)}
-      activeOpacity={0.7}
+    <View
+      style={[themedStyles.container]}
     >
-      {/* Avatar Column */}
-      <TouchableOpacity onPress={(e) => { e.stopPropagation(); router.push(`/user/${post.userId}`); }}>
-        <Image
-          source={{ uri: post.user.avatar || 'https://via.placeholder.com/40' }}
-          style={styles.avatar}
-        />
+      {/* Header: User Info + Follow Button */}
+      <View style={themedStyles.header}>
+        <TouchableOpacity
+          onPress={() => router.push(`/user/${post.userId}`)}
+          style={themedStyles.userInfo}
+        >
+          <Image
+            source={{ uri: post.user.avatar || 'https://via.placeholder.com/40' }}
+            style={themedStyles.avatar}
+          />
+          <View>
+            <View style={themedStyles.nameRow}>
+              <Text style={themedStyles.name} numberOfLines={1}>{post.user.username}</Text>
+              {post.user.isVerified && (
+                <IconSymbol
+                  ios_icon_name="checkmark.seal.fill"
+                  android_material_icon_name="verified"
+                  size={14}
+                  color={colors.primary}
+                  style={themedStyles.verificationBadge}
+                />
+              )}
+            </View>
+            <Text style={themedStyles.time}>{formatTime(post.createdAt)}</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Follow Button */}
+        {!isOwnPost && (
+          <TouchableOpacity
+            style={[
+              themedStyles.followButton,
+              isFollowing && themedStyles.followingButton,
+              followLoading && themedStyles.followButtonDisabled,
+            ]}
+            onPress={handleFollow}
+            disabled={followLoading}
+          >
+            <Text style={[themedStyles.followButtonText, isFollowing && themedStyles.followingButtonText]}>
+              {isFollowing ? 'Following' : 'Follow'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity style={themedStyles.moreButton}>
+          <IconSymbol ios_icon_name="ellipsis" android_material_icon_name="more-horiz" size={20} color={themeColors.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Post Content */}
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => router.push(`/post/${post.id}`)}
+      >
+        {post.type === 'reshare' ? (
+          <View style={themedStyles.reshareContainer}>
+            <View style={themedStyles.reshareIndicator}>
+              <IconSymbol ios_icon_name="arrow.2.squarepath" android_material_icon_name="cached" size={14} color={themeColors.textSecondary} />
+              <Text style={themedStyles.reshareText}>{post.user.username} reshared</Text>
+            </View>
+            
+            <View style={themedStyles.nestedPost}>
+              <View style={themedStyles.nestedHeader}>
+                <Image
+                  source={{ uri: post.originalPost?.user?.avatar || 'https://via.placeholder.com/20' }}
+                  style={themedStyles.nestedAvatar}
+                />
+                <Text style={themedStyles.nestedUsername}>{post.originalPost?.user?.username || 'user'}</Text>
+              </View>
+              {post.originalPost?.content && (
+                <Text style={themedStyles.nestedContent} numberOfLines={3}>
+                  {post.originalPost.content}
+                </Text>
+              )}
+              {post.originalPost?.mediaUrl && (
+                <Image 
+                  source={{ uri: post.originalPost.mediaUrl }} 
+                  style={themedStyles.nestedMedia} 
+                  resizeMode="cover" 
+                />
+              )}
+            </View>
+          </View>
+        ) : (
+          <>
+            {post.content && (
+              <Text style={themedStyles.textContent}>
+                {renderContentWithHashtags(post.content, router, themeColors)}
+              </Text>
+            )}
+
+            {post.mediaUrl && (post.type === 'image' || post.type === 'video' || post.type === 'reel' || post.type === 'post') && (
+              <Image source={{ uri: post.mediaUrl }} style={themedStyles.media} resizeMode="cover" />
+            )}
+          </>
+        )}
       </TouchableOpacity>
 
-      {/* Content Column */}
-      <View style={styles.contentContainer}>
-        {/* Header: Name + Handle + Time + Follow */}
-        <View style={styles.header}>
-          <View style={styles.userInfo}>
-            <Text style={styles.name} numberOfLines={1}>{post.user.username}</Text>
-            {post.user.isVerified && <IconSymbol ios_icon_name="checkmark.seal.fill" android_material_icon_name="verified" size={14} color={colors.primary} style={styles.verificationBadge} />}
-            <Text style={styles.handle} numberOfLines={1}>@{post.user.username?.toLowerCase()}</Text>
-            <Text style={styles.dot}>·</Text>
-            <Text style={styles.time}>{formatTime(post.createdAt)}</Text>
-          </View>
-
-          {/* Follow Button */}
-          {!isOwnPost && (
-            <TouchableOpacity
-              style={[
-                styles.followButton,
-                isFollowing && styles.followingButton,
-                followLoading && styles.followButtonDisabled,
-              ]}
-              onPress={(e) => { e.stopPropagation(); handleFollow(); }}
-              disabled={followLoading}
-            >
-              <Text style={[styles.followButtonText, isFollowing && styles.followingButtonText]}>
-                {isFollowing ? 'Following' : 'Follow'}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity style={styles.moreButton}>
-            <IconSymbol ios_icon_name="ellipsis" android_material_icon_name="more-horiz" size={16} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Text Content with Hashtags */}
-        {post.content && (
-          <Text style={styles.textContent}>
-            {renderContentWithHashtags(post.content, router)}
-          </Text>
-        )}
-
-        {/* Media */}
-        {post.mediaUrl && (post.type === 'image' || post.type === 'video') && (
-          <Image source={{ uri: post.mediaUrl }} style={styles.media} resizeMode="cover" />
-        )}
-
-        {/* Actions Row */}
-        <View style={styles.actionsRow}>
-          {/* Reply */}
-          <TouchableOpacity style={styles.actionItem} onPress={(e) => { e.stopPropagation(); handleComment(); }}>
-            <IconSymbol ios_icon_name="bubble.left" android_material_icon_name="chat-bubble-outline" size={18} color={colors.textSecondary} />
-            <Text style={styles.actionCount}>{post.commentsCount > 0 ? post.commentsCount : ''}</Text>
-          </TouchableOpacity>
-
-          {/* Repost */}
-          <TouchableOpacity style={styles.actionItem} onPress={(e) => { e.stopPropagation(); handleRepost(); }}>
-            <IconSymbol
-              ios_icon_name="arrow.2.squarepath"
-              android_material_icon_name="cached"
-              size={18}
-              color={isReposted ? "#00BA7C" : colors.textSecondary}
-            />
-            <Text style={[styles.actionCount, isReposted && { color: "#00BA7C" }]}>{repostCount > 0 ? repostCount : ''}</Text>
-          </TouchableOpacity>
-
-          {/* Like */}
-          <TouchableOpacity style={styles.actionItem} onPress={(e) => { e.stopPropagation(); handleLike(); }}>
+      {/* Engagement Row */}
+      <View style={themedStyles.actionsRow}>
+        <View style={themedStyles.leftActions}>
+          <TouchableOpacity style={themedStyles.actionItem} onPress={handleLike}>
             <IconSymbol
               ios_icon_name={isLiked ? "heart.fill" : "heart"}
               android_material_icon_name={isLiked ? "favorite" : "favorite-border"}
-              size={18}
-              color={isLiked ? "#F91880" : colors.textSecondary}
+              size={24}
+              color={isLiked ? "#FF3B30" : themeColors.text}
             />
-            <Text style={[styles.actionCount, isLiked && { color: "#F91880" }]}>{likesCount > 0 ? likesCount : ''}</Text>
+            {likesCount > 0 && <Text style={[themedStyles.actionCount, isLiked && { color: "#FF3B30" }]}>{likesCount}</Text>}
           </TouchableOpacity>
 
-          {/* Save */}
-          <TouchableOpacity style={styles.actionItem} onPress={(e) => { e.stopPropagation(); handleSave(); }}>
+          <TouchableOpacity style={themedStyles.actionItem} onPress={handleComment}>
+            <IconSymbol ios_icon_name="bubble.left" android_material_icon_name="chat-bubble-outline" size={22} color={themeColors.text} />
+            {post.commentsCount > 0 && <Text style={themedStyles.actionCount}>{post.commentsCount}</Text>}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={themedStyles.actionItem} onPress={handleRepost}>
+            <IconSymbol
+              ios_icon_name="arrow.2.squarepath"
+              android_material_icon_name="cached"
+              size={22}
+              color={isReposted ? "#00BA7C" : themeColors.text}
+            />
+            {repostCount > 0 && <Text style={[themedStyles.actionCount, isReposted && { color: "#00BA7C" }]}>{repostCount}</Text>}
+          </TouchableOpacity>
+        </View>
+
+        <View style={themedStyles.rightActions}>
+          <TouchableOpacity style={themedStyles.actionItem} onPress={handleSave}>
             <IconSymbol
               ios_icon_name={isSaved ? "bookmark.fill" : "bookmark"}
               android_material_icon_name={isSaved ? "bookmark" : "bookmark-border"}
-              size={18}
-              color={isSaved ? colors.primary : colors.textSecondary}
+              size={22}
+              color={isSaved ? colors.primary : themeColors.text}
             />
           </TouchableOpacity>
 
-          {/* Share */}
-          <TouchableOpacity style={styles.actionItem} onPress={(e) => { e.stopPropagation(); handleShare(); }}>
-            <IconSymbol ios_icon_name="square.and.arrow.up" android_material_icon_name="ios-share" size={18} color={colors.textSecondary} />
+          <TouchableOpacity style={themedStyles.actionItem} onPress={handleShare}>
+            <IconSymbol ios_icon_name="square.and.arrow.up" android_material_icon_name="share" size={22} color={themeColors.text} />
           </TouchableOpacity>
         </View>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (themeColors: typeof darkColors) => StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    padding: spacing.md,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: spacing.md,
-    backgroundColor: colors.border,
-  },
-  contentContainer: {
-    flex: 1,
+    borderBottomColor: themeColors.border,
+    backgroundColor: themeColors.card,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 2,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
   },
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    marginRight: spacing.sm,
+    backgroundColor: themeColors.border,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   name: {
     fontWeight: '700',
-    color: colors.text,
-    fontSize: 15,
+    color: themeColors.text,
+    fontSize: 14,
     marginRight: 4,
   },
   verificationBadge: {
     marginRight: 4,
   },
-  handle: {
-    color: colors.textSecondary,
-    fontSize: 15,
-    flexShrink: 1,
-  },
-  dot: {
-    color: colors.textSecondary,
-    marginHorizontal: 4,
-  },
   time: {
-    color: colors.textSecondary,
-    fontSize: 15,
+    color: themeColors.textSecondary,
+    fontSize: 12,
+    marginTop: 1,
   },
   followButton: {
-    backgroundColor: colors.text,
+    backgroundColor: colors.primary,
     paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-    borderRadius: borderRadius.full,
-    marginLeft: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: borderRadius.sm,
+    marginRight: spacing.sm,
   },
   followingButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: themeColors.border,
   },
   followButtonDisabled: {
     opacity: 0.6,
   },
   followButtonText: {
-    color: colors.background,
+    color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   followingButtonText: {
-    color: colors.text,
+    color: themeColors.text,
   },
   moreButton: {
-    marginLeft: spacing.sm,
     padding: 4,
   },
   textContent: {
     ...typography.body,
-    color: colors.text,
+    color: themeColors.text,
     fontSize: 15,
+    paddingHorizontal: spacing.md,
     marginBottom: spacing.sm,
     lineHeight: 20,
   },
@@ -379,26 +415,96 @@ const styles = StyleSheet.create({
   },
   media: {
     width: '100%',
-    aspectRatio: 16 / 9,
-    borderRadius: borderRadius.md,
-    marginTop: spacing.xs,
-    marginBottom: spacing.xs,
-    backgroundColor: colors.border,
+    aspectRatio: 1,
+    backgroundColor: themeColors.border,
   },
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: spacing.sm,
-    paddingRight: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  leftActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  rightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
   actionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    minWidth: 40,
+    gap: 6,
   },
   actionCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: themeColors.text,
+  },
+  reshareIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    marginBottom: 8,
+  },
+  reshareText: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: themeColors.textSecondary,
+    fontWeight: '700',
+  },
+  reshareContainer: {
+    paddingBottom: spacing.sm,
+  },
+  nestedPost: {
+    marginHorizontal: spacing.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: themeColors.border,
+    borderRadius: borderRadius.md,
+    backgroundColor: themeColors.background,
+    marginLeft: spacing.lg,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+  },
+  nestedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: spacing.xs,
+  },
+  nestedAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: themeColors.border,
+  },
+  nestedUsername: {
+    fontWeight: '700',
+    color: themeColors.text,
+    fontSize: 12,
+  },
+  nestedContent: {
+    fontSize: 14,
+    color: themeColors.text,
+    lineHeight: 18,
+    marginBottom: spacing.sm,
+  },
+  nestedMedia: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: borderRadius.sm,
+    backgroundColor: themeColors.border,
+  },
+});
+
+// Legacy styles constant for renderContentWithHashtags (it's outside the component)
+const styles = StyleSheet.create({
+  hashtag: {
+    color: colors.primary,
+    fontWeight: '600',
   },
 });

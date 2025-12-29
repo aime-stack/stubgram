@@ -17,6 +17,7 @@ import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import { PremiumHeader } from '@/components/PremiumHeader';
 import { useAuthStore } from '@/stores/authStore';
 import { useWalletStore } from '@/stores/walletStore';
 import { apiClient } from '@/services/api';
@@ -125,9 +126,43 @@ export default function CelebrityChatScreen() {
                 flatListRef.current?.scrollToEnd({ animated: true });
             }, 100);
 
-        } catch (error) {
+            // Mock auto-reply for demo purposes
+            if (celebrity.isCelebrity) {
+                setTimeout(async () => {
+                    setIsTyping(true);
+                    setTimeout(async () => {
+                        const replies = [
+                            "Hey! Thanks for messaging. I love your energy! ✨",
+                            "That's so interesting! I'm glad we're talking. 🙌",
+                            "I'm a bit busy on set right now, but I'll try to reply more soon! 🎬",
+                            "Keep being awesome! Your support means the world to me. ❤️",
+                        ];
+                        const randomReply = replies[Math.floor(Math.random() * replies.length)];
+
+                        // We push a "fake" message for visual feedback in demo
+                        const mockMsg: Message = {
+                            id: Date.now().toString(),
+                            conversationId: conversation.id,
+                            senderId: id,
+                            content: randomReply,
+                            createdAt: new Date().toISOString(),
+                            isRead: false,
+                            sender: {
+                                id: id,
+                                username: celebrity.username,
+                                avatar: celebrity.avatar,
+                            } as any
+                        };
+                        setMessages((prev) => [...prev, mockMsg]);
+                        setIsTyping(false);
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    }, 2000);
+                }, 1000);
+            }
+
+        } catch (error: any) {
             console.error('Failed to send:', error);
-            Alert.alert('Error', 'Failed to send message');
+            Alert.alert('Error', `Failed to send message: ${error.message || 'Unknown error'}`);
         } finally {
             setIsSending(false);
         }
@@ -169,30 +204,24 @@ export default function CelebrityChatScreen() {
 
     return (
         <KeyboardAvoidingView
-            style={[styles.container, { paddingTop: insets.top }]}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+            style={styles.container}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
-            <Stack.Screen
-                options={{
-                    headerShown: true,
-                    headerStyle: { backgroundColor: colors.background },
-                    headerTintColor: colors.text,
-                    headerTitle: () => (
-                        <View style={styles.headerTitle}>
-                            <Image source={{ uri: celebrity.avatar || 'https://via.placeholder.com/40' }} style={styles.headerAvatar} />
-                            <View>
-                                <View style={styles.headerNameRow}>
-                                    <Text style={styles.headerName}>{celebrity.full_name}</Text>
-                                    {celebrity.isVerified && (
-                                        <IconSymbol ios_icon_name="checkmark.seal.fill" android_material_icon_name="verified" size={14} color={colors.primary} />
-                                    )}
-                                </View>
-                                <Text style={styles.headerStatus}>{celebrity.isOnline ? 'Online' : 'Offline'}</Text>
-                            </View>
-                        </View>
-                    ),
-                }}
+            <PremiumHeader 
+                title={celebrity.full_name}
+                subtitle={celebrity.isOnline ? 'Online' : 'Offline'}
+                showBackButton={true}
+                rightElement={
+                    <View style={styles.headerTitle}>
+                        <Image source={{ uri: celebrity.avatar || 'https://via.placeholder.com/40' }} style={styles.headerAvatar} />
+                        {celebrity.isVerified && (
+                             <View style={{ marginLeft: -10, marginTop: 22, backgroundColor: '#FFFFFF', borderRadius: 7 }}>
+                                <IconSymbol ios_icon_name="checkmark.seal.fill" android_material_icon_name="verified" size={12} color={colors.primary} />
+                             </View>
+                        )}
+                    </View>
+                }
             />
 
             {/* Price Banner */}
@@ -218,7 +247,7 @@ export default function CelebrityChatScreen() {
             />
 
             {/* Input */}
-            <View style={[styles.inputContainer, { paddingBottom: insets.bottom + spacing.sm }]}>
+            <View style={styles.inputContainer}>
                 <TextInput
                     style={styles.input}
                     placeholder="Type a message..."
@@ -340,7 +369,7 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
     },
     messageTime: {
-        ...typography.small,
+        ...typography.caption,
         color: colors.textSecondary,
         marginTop: 4,
         alignSelf: 'flex-end',
@@ -375,6 +404,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'flex-end',
         padding: spacing.md,
+        paddingBottom: Platform.OS === 'android' ? spacing.md : spacing.xl,
         borderTopWidth: 1,
         borderTopColor: colors.border,
         backgroundColor: colors.background,

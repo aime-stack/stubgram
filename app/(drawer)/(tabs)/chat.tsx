@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import { PremiumHeader } from '@/components/PremiumHeader';
 import { apiClient } from '@/services/api';
 
 export default function ChatScreen() {
@@ -58,13 +59,14 @@ export default function ChatScreen() {
     );
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Messages</Text>
-                <TouchableOpacity style={styles.settingsButton}>
-                    <IconSymbol ios_icon_name="gearshape" android_material_icon_name="settings" size={24} color={colors.text} />
-                </TouchableOpacity>
-            </View>
+        <View style={styles.container}>
+            <PremiumHeader 
+                title="Messages"
+                subtitle="Your private conversations"
+                showBackButton={false}
+                iosIconName="bubble.left.and.bubble.right.fill"
+                androidIconName="forum"
+            />
 
             {isLoading ? (
                 <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -101,18 +103,21 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: colors.background,
     },
-    header: {
+    premiumHeader: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: spacing.lg,
+        justifyContent: 'space-between',
+        padding: spacing.lg,
         paddingBottom: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
     },
-    title: {
-        ...typography.h3,
+    premiumTitle: {
+        ...typography.h1,
         color: colors.text,
+    },
+    premiumSubtitle: {
+        ...typography.body,
+        color: colors.textSecondary,
+        marginTop: 2,
     },
     settingsButton: {
         padding: spacing.sm,

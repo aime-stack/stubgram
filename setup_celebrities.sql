@@ -64,32 +64,32 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Create Celebrities
 SELECT create_celebrity_user(
-  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'meddy@snapgram.com', 'MeddieSsentongo', 'Meddy', 
+  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'meddy@StubGram.com', 'MeddieSsentongo', 'Meddy', 
   'https://via.placeholder.com/150?text=Meddy', 'Rwandan R&B/Afrobeat Artist 🎵', 500
 );
 
 SELECT create_celebrity_user(
-  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12', 'bruce@snapgram.com', 'BruceMelody', 'Bruce Melodie', 
+  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12', 'bruce@StubGram.com', 'BruceMelody', 'Bruce Melodie', 
   'https://via.placeholder.com/150?text=Bruce', 'Afrobeat & Pop Singer 🇷🇼', 450
 );
 
 SELECT create_celebrity_user(
-  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13', 'kingjames@snapgram.com', 'TheReal_King_James', 'King James', 
+  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13', 'kingjames@StubGram.com', 'TheReal_King_James', 'King James', 
   'https://via.placeholder.com/150?text=KJ', 'Rapper | Producer | Artist', 400
 );
 
 SELECT create_celebrity_user(
-  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14', 'charlene@snapgram.com', 'CharleneRuto', 'Charlene Ruto', 
+  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14', 'charlene@StubGram.com', 'CharleneRuto', 'Charlene Ruto', 
   'https://via.placeholder.com/150?text=CR', 'Lifestyle & Fashion Influencer ✨', 350
 );
 
 SELECT create_celebrity_user(
-  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15', 'missrwanda@snapgram.com', 'MisRwanda_Official', 'Miss Rwanda', 
+  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15', 'missrwanda@StubGram.com', 'MisRwanda_Official', 'Miss Rwanda', 
   'https://via.placeholder.com/150?text=MR', 'Beauty Queen 👑 | Ambassador', 400
 );
 
 SELECT create_celebrity_user(
-  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16', 'claire@snapgram.com', 'ClaireMuvunyi', 'Claire Muvunyi', 
+  'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a16', 'claire@StubGram.com', 'ClaireMuvunyi', 'Claire Muvunyi', 
   'https://via.placeholder.com/150?text=CM', 'Actress | TV Host | Model', 300
 );
 
@@ -98,3 +98,4 @@ DO $$
 BEGIN
   RAISE NOTICE 'Celebrities setup successfully';
 END $$;
+

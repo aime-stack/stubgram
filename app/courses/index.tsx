@@ -53,54 +53,47 @@ export default function CoursesScreen() {
       style={styles.courseCard}
       onPress={() => router.push(`/courses/${item.id}`)}
     >
-      <Image
-        source={{ uri: item.thumbnail || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400' }}
-        style={styles.courseThumbnail}
-      />
+      <View style={styles.thumbnailContainer}>
+        <Image
+          source={{ uri: item.thumbnail || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400' }}
+          style={styles.courseThumbnail}
+        />
+        <View style={styles.priceBadge}>
+          <Text style={styles.priceText}>{item.price} 🪙</Text>
+        </View>
+      </View>
       <View style={styles.courseInfo}>
         <Text style={styles.courseTitle} numberOfLines={2}>
           {item.title}
         </Text>
         <Text style={styles.courseTeacher} numberOfLines={1}>
-          by {item.teacher.username}
+          By {item.teacher.username}
         </Text>
         <View style={styles.courseStats}>
           <View style={styles.courseStat}>
             <IconSymbol
-              ios_icon_name="person.2"
-              android_material_icon_name="people"
-              size={16}
-              color={colors.textSecondary}
-            />
-            <Text style={styles.courseStatText}>{item.studentsCount}</Text>
-          </View>
-          <View style={styles.courseStat}>
-            <IconSymbol
               ios_icon_name="star.fill"
               android_material_icon_name="star"
-              size={16}
+              size={12}
               color={colors.accent}
             />
-            <Text style={styles.courseStatText}>{item.rating.toFixed(1)}</Text>
+            <Text style={styles.courseStatLabel}>{item.rating.toFixed(1)}</Text>
           </View>
           <View style={styles.courseStat}>
             <IconSymbol
-              ios_icon_name="clock"
-              android_material_icon_name="schedule"
-              size={16}
+              ios_icon_name="person.2.fill"
+              android_material_icon_name="people"
+              size={12}
               color={colors.textSecondary}
             />
-            <Text style={styles.courseStatText}>{item.duration}</Text>
+            <Text style={styles.courseStatLabel}>{item.studentsCount}</Text>
           </View>
         </View>
-        <View style={styles.courseFooter}>
-          <Text style={styles.coursePrice}>{item.price} 🪙</Text>
-          {item.isEnrolled && (
-            <View style={styles.enrolledBadge}>
-              <Text style={styles.enrolledText}>Enrolled</Text>
-            </View>
-          )}
-        </View>
+        {item.isEnrolled && (
+          <View style={styles.enrolledBanner}>
+            <Text style={styles.enrolledBannerText}>Enrolled</Text>
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -294,63 +287,75 @@ const styles = StyleSheet.create({
   courseCard: {
     width: '48%',
     backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.lg,
     marginBottom: spacing.md,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
     ...shadows.sm,
+  },
+  thumbnailContainer: {
+    position: 'relative',
   },
   courseThumbnail: {
     width: '100%',
-    height: 120,
-    backgroundColor: colors.border,
+    height: 100,
+    backgroundColor: colors.divider,
+  },
+  priceBadge: {
+    position: 'absolute',
+    bottom: spacing.xs,
+    right: spacing.xs,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  priceText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   courseInfo: {
-    padding: spacing.md,
+    padding: spacing.sm,
   },
   courseTitle: {
-    ...typography.body,
+    ...typography.small,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: spacing.xs,
+    height: 32,
+    marginBottom: 4,
   },
   courseTeacher: {
-    ...typography.small,
+    fontSize: 10,
     color: colors.textSecondary,
-    marginBottom: spacing.sm,
+    marginBottom: 8,
   },
   courseStats: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
+    gap: spacing.md,
+    alignItems: 'center',
   },
   courseStat: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
   },
-  courseStatText: {
-    ...typography.small,
+  courseStatLabel: {
+    fontSize: 10,
     color: colors.textSecondary,
   },
-  courseFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  enrolledBanner: {
+    marginTop: spacing.sm,
+    backgroundColor: `${colors.highlight}20`,
+    paddingVertical: 2,
+    borderRadius: 4,
     alignItems: 'center',
   },
-  coursePrice: {
-    ...typography.body,
-    fontWeight: '700',
-    color: colors.accent,
-  },
-  enrolledBadge: {
-    backgroundColor: colors.highlight,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-  },
-  enrolledText: {
-    ...typography.small,
-    color: '#FFFFFF',
-    fontWeight: '600',
+  enrolledBannerText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: colors.highlight,
+    textTransform: 'uppercase',
   },
 });

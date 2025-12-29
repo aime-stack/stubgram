@@ -1,4 +1,4 @@
--- SnapGram Additional Tables for New Features
+-- StubGram Additional Tables for New Features
 -- Run this in your Supabase SQL Editor
 -- This version handles existing tables/policies gracefully
 
@@ -312,3 +312,4 @@ INSERT INTO public.wallets (user_id, balance)
 SELECT id, 100 FROM public.profiles
 WHERE id NOT IN (SELECT user_id FROM public.wallets)
 ON CONFLICT (user_id) DO NOTHING;
+

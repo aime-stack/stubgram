@@ -16,6 +16,7 @@ import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import { PremiumHeader } from '@/components/PremiumHeader';
 import { Message, User } from '@/types';
 import { apiClient } from '@/services/api';
 import { socketService } from '@/services/socket';
@@ -220,28 +221,22 @@ export default function ConversationScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          headerStyle: { backgroundColor: colors.background },
-          headerTintColor: colors.text,
-          headerTitle: () => (
-            <View style={styles.headerInfo}>
-              <Image
-                source={{ uri: otherUser?.avatar || 'https://via.placeholder.com/32' }}
-                style={styles.headerAvatar}
-              />
-              <View>
-                <Text style={styles.headerTitle}>{otherUser?.username || 'Chat'}</Text>
-                {isTyping && <Text style={styles.typingIndicator}>typing...</Text>}
-              </View>
-            </View>
-          ),
-        }}
+      <PremiumHeader 
+        title={otherUser?.username || 'Chat'}
+        subtitle={isTyping ? 'typing...' : 'Online'}
+        showBackButton={true}
+        rightElement={
+          <View style={styles.headerInfo}>
+            <Image
+              source={{ uri: otherUser?.avatar || 'https://via.placeholder.com/32' }}
+              style={styles.headerAvatar}
+            />
+          </View>
+        }
       />
 
       {/* Messages */}
@@ -326,7 +321,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   typingIndicator: {
-    ...typography.small,
+    ...typography.caption,
     fontSize: 10,
     color: colors.primary,
     fontStyle: 'italic',
@@ -383,7 +378,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   messageTime: {
-    ...typography.small,
+    ...typography.caption,
     fontSize: 10,
   },
   ownMessageTime: {

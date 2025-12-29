@@ -40,10 +40,11 @@ export const typography = {
     fontWeight: '500' as const,
     lineHeight: 20,
   },
-  small: {
-    fontSize: 12,
-    fontWeight: '400' as const,
-    lineHeight: 16,
+  branding: {
+    fontSize: 28,
+    fontWeight: '700' as const,
+    letterSpacing: -0.5,
+    fontFamily: 'System', // Fallback, will try to use a stylized look in the component
   },
 };
 
@@ -105,17 +106,20 @@ export const commonStyles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.lg,
     padding: spacing.md,
-    ...shadows.sm,
+    ...shadows.md,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   button: {
     backgroundColor: colors.primary,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.full,
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
+    ...shadows.sm,
   },
   buttonText: {
     color: '#FFFFFF',

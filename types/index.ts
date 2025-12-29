@@ -16,15 +16,20 @@ export interface User {
   postsCount: number;
   createdAt: string;
   updatedAt?: string;
+  isFollowing?: boolean;
 }
 
 export interface Post {
   id: string;
   userId: string;
   user: User;
-  type: 'text' | 'image' | 'video' | 'audio' | 'poll' | 'link';
+  type: 'text' | 'image' | 'video' | 'audio' | 'poll' | 'link' | 'reel' | 'post' | 'reshare';
   content?: string;
-  mediaUrl?: string;
+  mediaUrl?: string; // This will map to image_url or video_url from DB
+  videoUrl?: string;
+  thumbnailUrl?: string;
+  mediaMetadata?: any;
+  viewsCount?: number;
   linkPreview?: LinkPreview;
   pollOptions?: PollOption[];
   likesCount: number;
@@ -32,9 +37,21 @@ export interface Post {
   sharesCount: number;
   isLiked: boolean;
   isBoosted: boolean;
+  isSaved?: boolean;
   createdAt: string;
   updatedAt: string;
-  isSaved?: boolean;
+  // Transcoding fields
+  processing_status?: 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED';
+  original_url?: string;
+  processed_url?: string;
+  duration?: number;
+  resolution?: string;
+  resharedFrom?: string;
+  originalPost?: Post;
+}
+
+export interface Reel extends Post {
+  videoUrl: string; // Helper for legacy reel code
 }
 
 export interface LinkPreview {
@@ -99,9 +116,12 @@ export interface Message {
 export interface WalletTransaction {
   id: string;
   userId: string;
-  type: 'reward' | 'purchase' | 'deposit' | 'withdrawal' | 'spend';
+  type: 'reward' | 'purchase' | 'deposit' | 'withdrawal' | 'spend' | 'CASH_IN' | 'CASH_OUT';
   amount: number;
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'completed';
   description: string;
+  paypackId?: string;
+  reference?: string;
   createdAt: string;
 }
 
@@ -179,5 +199,35 @@ export interface VideoSpaceParticipant {
   hasVideo: boolean;
   joinedAt: string;
   lastSeenAt: string;
+  leftAt?: string;
+}
+
+export interface Meeting {
+  id: string;
+  hostId: string;
+  host: User;
+  title: string;
+  description?: string;
+  meetingId: string; // Human readable or short ID
+  type: 'public' | 'private' | 'scheduled';
+  status: 'active' | 'ended' | 'scheduled';
+  startTime?: string;
+  endTime?: string;
+  isPasswordProtected: boolean;
+  meetingPassword?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MeetingParticipant {
+  id: string;
+  meetingId: string;
+  userId: string;
+  user: User;
+  role: 'host' | 'participant' | 'moderator';
+  isMuted: boolean;
+  hasVideo: boolean;
+  handRaised: boolean;
+  joinedAt: string;
   leftAt?: string;
 }

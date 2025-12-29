@@ -15,6 +15,8 @@ import { useRouter, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import { PremiumHeader } from '@/components/PremiumHeader';
+import { useAuthStore } from '@/stores/authStore';
 import * as Haptics from 'expo-haptics';
 
 // FAQ Data
@@ -74,18 +76,16 @@ export default function SupportScreen() {
     };
 
     const handleEmailSupport = () => {
-        Linking.openURL('mailto:help@snapgram.com');
+        Linking.openURL('mailto:help@Stubgram.com');
     };
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            <Stack.Screen
-                options={{
-                    title: 'Help & Support',
-                    headerShown: true,
-                    headerStyle: { backgroundColor: colors.background },
-                    headerTintColor: colors.text,
-                }}
+        <View style={styles.container}>
+            <PremiumHeader 
+                title="Help & Support" 
+                subtitle="How can we help you today?"
+                iosIconName="lifepreserver.fill"
+                androidIconName="help"
             />
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -96,7 +96,7 @@ export default function SupportScreen() {
                         <IconSymbol ios_icon_name="envelope.fill" android_material_icon_name="email" size={24} color={colors.primary} />
                         <View style={styles.contactInfo}>
                             <Text style={styles.contactLabel}>Email Support</Text>
-                            <Text style={styles.contactValue}>help@snapgram.com</Text>
+                            <Text style={styles.contactValue}>help@Stubgram.com</Text>
                         </View>
                         <IconSymbol ios_icon_name="chevron.right" android_material_icon_name="chevron-right" size={20} color={colors.textSecondary} />
                     </TouchableOpacity>

@@ -15,6 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import { colors, spacing, borderRadius, typography, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import { PremiumHeader } from '@/components/PremiumHeader';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import * as Haptics from 'expo-haptics';
@@ -82,7 +83,7 @@ export default function SettingsScreen() {
   };
 
   const handleContactSupport = () => {
-    Linking.openURL('mailto:help@snapgram.com');
+    Linking.openURL('mailto:help@Stubgram.com');
   };
 
   type SettingsItem =
@@ -250,24 +251,31 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <IconSymbol
-            ios_icon_name="chevron.left"
-            android_material_icon_name="arrow-back"
-            size={24}
-            color={colors.text}
-          />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <View style={styles.backButton} />
-      </View>
+      <PremiumHeader 
+        title="Settings" 
+        subtitle="Manage your account and preferences"
+        iosIconName="gearshape.fill"
+        androidIconName="settings"
+      />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Header Section */}
+        <View style={styles.headerSection}>
+          <IconSymbol
+            ios_icon_name="gearshape.fill"
+            android_material_icon_name="settings"
+            size={64}
+            color={colors.primary}
+          />
+          <Text style={styles.headerSectionTitle}>Settings & Preferences</Text>
+          <Text style={styles.headerSectionSubtitle}>
+            Manage your account, privacy, and app preferences
+          </Text>
+        </View>
+
         {/* User Info */}
         {user && (
           <View style={styles.userCard}>
@@ -361,29 +369,28 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingTop: Platform.OS === 'android' ? spacing.xxl + 20 : spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    ...typography.h3,
-    color: colors.text,
-  },
   scrollContent: {
     padding: spacing.md,
     paddingBottom: 120,
+  },
+  headerSection: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  headerSectionTitle: {
+    ...typography.h2,
+    color: colors.text,
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  headerSectionSubtitle: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    maxWidth: '80%',
   },
   userCard: {
     flexDirection: 'row',
@@ -393,15 +400,6 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.lg,
     ...shadows.sm,
-  },
-  userAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: `${colors.primary}20`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.md,
   },
   userAvatarImage: {
     width: 64,
@@ -478,7 +476,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   version: {
-    ...typography.small,
+    ...typography.caption,
+    fontSize: 12,
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.lg,

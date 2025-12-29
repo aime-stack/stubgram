@@ -11,6 +11,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
@@ -30,6 +31,8 @@ export default function PostDetailScreen() {
   const [commentText, setCommentText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(false);
 
   const loadPost = useCallback(async () => {
     try {
@@ -134,11 +137,122 @@ export default function PostDetailScreen() {
       </View>
 
       <ScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Post */}
-        <PostCard post={post} />
+        {/* Main Post Content (Twitter Style) */}
+        <View style={styles.mainPost}>
+          <View style={styles.postHeader}>
+            <TouchableOpacity onPress={() => router.push(`/user/${post.userId}`)}>
+              <Image
+                source={{ uri: post.user.avatar || 'https://via.placeholder.com/50' }}
+                style={styles.mainAvatar}
+              />
+            </TouchableOpacity>
+            <View style={styles.mainUserInfo}>
+              <View style={styles.nameRow}>
+                <Text style={styles.mainName}>{post.user.username}</Text>
+                {post.user.isVerified && (
+                  <IconSymbol
+                    ios_icon_name="checkmark.seal.fill"
+                    android_material_icon_name="verified"
+                    size={16}
+                    color={colors.primary}
+                  />
+                )}
+              </View>
+              <Text style={styles.mainHandle}>@{post.user.username?.toLowerCase()}</Text>
+            </View>
+            <TouchableOpacity>
+              <IconSymbol ios_icon_name="ellipsis" android_material_icon_name="more-horiz" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.mainContentText}>{post.content}</Text>
+
+          {post.mediaUrl && (
+            <Image source={{ uri: post.mediaUrl }} style={styles.mainMedia} resizeMode="cover" />
+          )}
+
+          <View style={styles.timeRow}>
+            <Text style={styles.detailedTime}>
+              {new Date(post.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {new Date(post.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+            </Text>
+          </View>
+
+          <View style={styles.statsRow}>
+            <View style={styles.statLine}>
+              <Text style={styles.statValue}>{post.sharesCount || 0}</Text>
+              <Text style={styles.statLabel}>Reposts</Text>
+            </View>
+            <View style={styles.statLine}>
+              <Text style={styles.statValue}>{post.likesCount || 0}</Text>
+              <Text style={styles.statLabel}>Likes</Text>
+            </View>
+            <View style={styles.statLine}>
+              <Text style={styles.statValue}>{post.commentsCount || 0}</Text>
+              <Text style={styles.statLabel}>Quotes</Text>
+            </View>
+          </View>
+
+          <View style={styles.mainActions}>
+            <TouchableOpacity>
+              <IconSymbol ios_icon_name="bubble.left" android_material_icon_name="chat-bubble-outline" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={async () => {
+              try {
+                await apiClient.sharePost(id, 'internal');
+                addCoins(2, 'Reposted content');
+                setPost(prev => prev ? { ...prev, sharesCount: (prev.sharesCount || 0) + 1 } : null);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              } catch (error) {
+                console.error('Failed to repost:', error);
+                Alert.alert('Error', 'Failed to repost');
+              }
+            }}>
+              <IconSymbol ios_icon_name="arrow.2.squarepath" android_material_icon_name="cached" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={async () => {
+              try {
+                const response = await apiClient.likePost(id);
+                const { isLiked: newIsLiked, likesCount: newLikesCount } = response.data;
+                
+                setIsLiked(newIsLiked);
+                setPost(prev => prev ? { ...prev, likesCount: prev.likesCount + (newIsLiked ? 1 : -1) } : null);
+                
+                if (newIsLiked) {
+                    addCoins(1, 'Liked a post');
+                }
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              } catch (error) {
+                console.error('Failed to like post:', error);
+                Alert.alert('Error', 'Action failed');
+              }
+            }}>
+              <IconSymbol ios_icon_name={isLiked ? 'heart.fill' : 'heart'} android_material_icon_name={isLiked ? 'favorite' : 'favorite-border'} size={24} color={isLiked ? colors.secondary : colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => {
+              setIsBookmarked(!isBookmarked);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}>
+              <IconSymbol ios_icon_name={isBookmarked ? 'bookmark.fill' : 'bookmark'} android_material_icon_name={isBookmarked ? 'bookmark' : 'bookmark-border'} size={24} color={isBookmarked ? colors.primary : colors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={async () => {
+              try {
+                await apiClient.sharePost(id);
+                addCoins(2, 'Shared a post');
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                Alert.alert('Success', 'Post shared!');
+              } catch (error) {
+                console.error('Failed to share:', error);
+              }
+            }}>
+              <IconSymbol ios_icon_name="square.and.arrow.up" android_material_icon_name="share" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Comments Section */}
         <View style={styles.commentsSection}>
@@ -228,7 +342,7 @@ export default function PostDetailScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingView >
   );
 }
 
@@ -258,8 +372,86 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   scrollContent: {
-    padding: spacing.md,
-    paddingBottom: 100,
+    paddingBottom: spacing.xl,
+  },
+  mainPost: {
+    paddingVertical: spacing.md,
+  },
+  postHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  mainAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: spacing.md,
+  },
+  mainUserInfo: {
+    flex: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  mainName: {
+    ...typography.h3,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  mainHandle: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+  mainContentText: {
+    fontSize: 22,
+    lineHeight: 28,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  mainMedia: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.md,
+    backgroundColor: colors.card,
+  },
+  timeRow: {
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  detailedTime: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: spacing.lg,
+  },
+  statLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statValue: {
+    fontWeight: '700',
+    color: colors.text,
+  },
+  statLabel: {
+    color: colors.textSecondary,
+  },
+  mainActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   loadingContainer: {
     flex: 1,
@@ -278,12 +470,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   commentsSection: {
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
   },
   commentsTitle: {
     ...typography.h3,
     color: colors.text,
     marginBottom: spacing.md,
+    fontSize: 18,
   },
   emptyComments: {
     alignItems: 'center',
@@ -300,23 +493,22 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   commentItem: {
-    backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   commentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: spacing.xs,
+    marginBottom: 4,
   },
   commentUsername: {
-    ...typography.body,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
   },
   commentTime: {
-    ...typography.small,
+    fontSize: 12,
     color: colors.textSecondary,
   },
   commentContent: {
@@ -331,15 +523,15 @@ const styles = StyleSheet.create({
   commentAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: 4,
   },
   commentActionText: {
-    ...typography.caption,
+    fontSize: 12,
     color: colors.textSecondary,
   },
   commentInputContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: spacing.sm,
     padding: spacing.md,
     borderTopWidth: 1,
@@ -351,19 +543,20 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text,
     backgroundColor: colors.card,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
     maxHeight: 100,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendButtonDisabled: {
-    opacity: 0.5,
+    backgroundColor: colors.border,
   },
 });

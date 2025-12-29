@@ -30,7 +30,7 @@ export default function TermsConditionsScreen() {
 
                 <Text style={styles.sectionTitle}>1. Acceptance of Terms</Text>
                 <Text style={styles.paragraph}>
-                    By accessing and using SnapGram, you agree to be bound by these Terms and Conditions
+                    By accessing and using Stubgram, you agree to be bound by these Terms and Conditions
                     and all applicable laws and regulations. If you do not agree with any of these terms,
                     you are prohibited from using this service.
                 </Text>
@@ -39,12 +39,12 @@ export default function TermsConditionsScreen() {
                 <Text style={styles.paragraph}>
                     You are responsible for maintaining the confidentiality of your account and password.
                     You agree to accept responsibility for all activities that occur under your account.
-                    You must be at least 13 years old to use SnapGram.
+                    You must be at least 13 years old to use Stubgram.
                 </Text>
 
                 <Text style={styles.sectionTitle}>3. User Content</Text>
                 <Text style={styles.paragraph}>
-                    You retain ownership of content you post on SnapGram. By posting content, you grant
+                    You retain ownership of content you post on Stubgram. By posting content, you grant
                     us a non-exclusive, worldwide, royalty-free license to use, display, and distribute
                     your content on our platform.
                 </Text>
@@ -79,7 +79,7 @@ export default function TermsConditionsScreen() {
 
                 <Text style={styles.sectionTitle}>8. Limitation of Liability</Text>
                 <Text style={styles.paragraph}>
-                    SnapGram is provided "as is" without warranties of any kind. We are not liable for
+                    Stubgram is provided "as is" without warranties of any kind. We are not liable for
                     any indirect, incidental, or consequential damages arising from your use of the service.
                 </Text>
 
@@ -99,7 +99,7 @@ export default function TermsConditionsScreen() {
                 <Text style={styles.paragraph}>
                     For questions about these Terms & Conditions, contact us at:
                 </Text>
-                <Text style={styles.email}>help@snapgram.com</Text>
+                <Text style={styles.email}>help@Stubgram.com</Text>
             </ScrollView>
         </View>
     );

@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import { PremiumHeader } from '@/components/PremiumHeader';
 import { useAuthStore } from '@/stores/authStore';
 import { useWalletStore } from '@/stores/walletStore';
 import * as Haptics from 'expo-haptics';
@@ -155,14 +156,12 @@ export default function PremiumScreen() {
     };
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            <Stack.Screen
-                options={{
-                    title: 'Premium Plans',
-                    headerShown: true,
-                    headerStyle: { backgroundColor: colors.background },
-                    headerTintColor: colors.text,
-                }}
+        <View style={styles.container}>
+            <PremiumHeader 
+                title="Premium Plans" 
+                subtitle="Unlock exclusive features"
+                iosIconName="star.fill"
+                androidIconName="star"
             />
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -170,10 +169,9 @@ export default function PremiumScreen() {
                 <View style={styles.header}>
                     <Text style={styles.title}>Upgrade to Premium</Text>
                     <Text style={styles.subtitle}>
-                        Unlock exclusive features and enhance your SnapGram experience
+                        Unlock exclusive features and enhance your Stubgram experience
                     </Text>
                 </View>
-
                 {/* Plans */}
                 {PLANS.map((plan) => (
                     <View key={plan.id} style={styles.planWrapper}>

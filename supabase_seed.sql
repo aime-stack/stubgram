@@ -1,5 +1,5 @@
 -- =====================================================
--- SNAPGRAM SEED DATA - Rwandan/African Content
+-- StubGram SEED DATA - Rwandan/African Content
 -- Run this AFTER supabase_schema.sql
 -- =====================================================
 
@@ -256,10 +256,11 @@ ON CONFLICT (id) DO NOTHING;
 
 DO $$
 BEGIN
-  RAISE NOTICE 'SnapGram seed data inserted successfully!';
+  RAISE NOTICE 'StubGram seed data inserted successfully!';
   RAISE NOTICE 'Created: 5 users, 10 posts, 5 courses, 4 stories';
   RAISE NOTICE 'Sample users: mutesi_grace, kevin_neza, aline_uwimana, didier_mugisha, chantal_iradukunda';
   RAISE NOTICE '';
   RAISE NOTICE 'NOTE: Foreign key constraints were removed for sample data.';
   RAISE NOTICE 'For production, real users will be created via auth.users which triggers profile creation.';
 END $$;
+

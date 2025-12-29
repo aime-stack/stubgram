@@ -1,5 +1,5 @@
 -- =====================================================
--- SNAPGRAM SUPABASE SCHEMA (IDEMPOTENT VERSION)
+-- StubGram SUPABASE SCHEMA (IDEMPOTENT VERSION)
 -- Safe to run multiple times - drops and recreates
 -- Run this in Supabase Dashboard > SQL Editor
 -- =====================================================
@@ -534,7 +534,6 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('posts', 'posts', true)
 ON CONFLICT (id) DO NOTHING;
-
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('stories', 'stories', true)
 ON CONFLICT (id) DO NOTHING;
@@ -543,35 +542,83 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('courses', 'courses', true)
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('reels', 'reels', true)
+ON CONFLICT (id) DO NOTHING;
+
 -- =====================================================
 -- SUCCESS MESSAGE
 -- =====================================================
 DO $$
 BEGIN
-  RAISE NOTICE 'SnapGram schema created/updated successfully!';
-  RAISE NOTICE 'Tables: profiles, posts, comments, likes, follows, stories, wallets, transactions, courses, conversations, messages, enrollments, notifications';
+  RAISE NOTICE 'StubGram schema created/updated successfully!';
+  RAISE NOTICE 'Tables: profiles, posts, comments, likes, follows, stories, wallets, transactions, courses, conversations, messages, enrollments, notifications, reels';
 END $$;
- 
- - -   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =  
- - -   1 6 .   S T O R Y   V I E W S   T A B L E  
- - -   = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =  
- C R E A T E   T A B L E   I F   N O T   E X I S T S   p u b l i c . s t o r y _ v i e w s   (  
-     i d   U U I D   D E F A U L T   u u i d _ g e n e r a t e _ v 4 ( )   P R I M A R Y   K E Y ,  
-     s t o r y _ i d   U U I D   N O T   N U L L   R E F E R E N C E S   p u b l i c . s t o r i e s ( i d )   O N   D E L E T E   C A S C A D E ,  
-     u s e r _ i d   U U I D   N O T   N U L L   R E F E R E N C E S   p u b l i c . p r o f i l e s ( i d )   O N   D E L E T E   C A S C A D E ,  
-     v i e w e d _ a t   T I M E S T A M P T Z   D E F A U L T   N O W ( ) ,  
-     U N I Q U E ( s t o r y _ i d ,   u s e r _ i d )  
- ) ;  
-  
- A L T E R   T A B L E   p u b l i c . s t o r y _ v i e w s   E N A B L E   R O W   L E V E L   S E C U R I T Y ;  
-  
- D R O P   P O L I C Y   I F   E X I S T S   " U s e r s   c a n   v i e w   t h e i r   o w n   s t o r y   v i e w s "   O N   p u b l i c . s t o r y _ v i e w s ;  
- D R O P   P O L I C Y   I F   E X I S T S   " U s e r s   c a n   i n s e r t   t h e i r   o w n   s t o r y   v i e w s "   O N   p u b l i c . s t o r y _ v i e w s ;  
- D R O P   P O L I C Y   I F   E X I S T S   " A n y o n e   c a n   v i e w   s t o r y   v i e w s "   O N   p u b l i c . s t o r y _ v i e w s ;  
-  
- C R E A T E   P O L I C Y   " A n y o n e   c a n   v i e w   s t o r y   v i e w s "   O N   p u b l i c . s t o r y _ v i e w s  
-     F O R   S E L E C T   U S I N G   ( t r u e ) ;   - -   S i m p l i f i e d   f o r   n o w ,   c o u l d   b e   r e s t r i c t i v e  
-  
- C R E A T E   P O L I C Y   " U s e r s   c a n   i n s e r t   t h e i r   o w n   s t o r y   v i e w s "   O N   p u b l i c . s t o r y _ v i e w s  
-     F O R   I N S E R T   W I T H   C H E C K   ( a u t h . u i d ( )   =   u s e r _ i d ) ;  
- 
+
+-- =====================================================
+-- 16. STORY VIEWS TABLE
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.story_views (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    story_id UUID NOT NULL REFERENCES public.stories(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    viewed_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(story_id, user_id)
+);
+
+ALTER TABLE public.story_views ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Anyone can view story views" ON public.story_views FOR SELECT USING (true);
+CREATE POLICY "Users can insert their own story views" ON public.story_views FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- =====================================================
+-- 17. REELS TABLE
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.reels (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  video_url TEXT NOT NULL,
+  thumbnail_url TEXT,
+  caption TEXT,
+  likes_count INTEGER DEFAULT 0,
+  comments_count INTEGER DEFAULT 0,
+  views_count INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.reels ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Reels are viewable by everyone" ON public.reels FOR SELECT USING (true);
+CREATE POLICY "Anyone can create reels" ON public.reels FOR INSERT WITH CHECK (true);
+
+CREATE INDEX IF NOT EXISTS reels_created_at_idx ON public.reels(created_at DESC);
+
+-- =====================================================
+-- 18. REEL LIKES TABLE
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.reel_likes (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  reel_id UUID NOT NULL REFERENCES public.reels(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, reel_id)
+);
+
+ALTER TABLE public.reel_likes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Anyone can view reel likes" ON public.reel_likes FOR SELECT USING (true);
+CREATE POLICY "Anyone can like reels" ON public.reel_likes FOR INSERT WITH CHECK (true);
+
+-- =====================================================
+-- 19. REEL COMMENTS TABLE
+-- =====================================================
+CREATE TABLE IF NOT EXISTS public.reel_comments (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  reel_id UUID NOT NULL REFERENCES public.reels(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.reel_comments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Anyone can view reel comments" ON public.reel_comments FOR SELECT USING (true);
+CREATE POLICY "Anyone can comment on reels" ON public.reel_comments FOR INSERT WITH CHECK (true);
+```

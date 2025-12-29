@@ -13,7 +13,7 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
@@ -31,28 +31,91 @@ export default function CreatePostScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const { addCoins } = useWalletStore();
+  const params = useLocalSearchParams<{ mediaUri?: string; mediaType?: 'image' | 'video' }>();
 
+  const [postType, setPostType] = useState<'post' | 'reel'>('post');
   const [content, setContent] = useState('');
   const [mediaUri, setMediaUri] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
+
+  useEffect(() => {
+    if (params.mediaUri) {
+        setMediaUri(params.mediaUri);
+        if (params.mediaType) {
+            setMediaType(params.mediaType);
+            if (params.mediaType === 'video') {
+                setPostType('reel');
+            }
+        }
+    }
+  }, [params.mediaUri, params.mediaType]);
   const [pollOptions, setPollOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showPollInput, setShowPollInput] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [linkMetadata, setLinkMetadata] = useState<any>(null);
+  const [isFetchingMetadata, setIsFetchingMetadata] = useState(false);
+
+  useEffect(() => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = content.match(urlRegex);
+    
+    if (urls && urls.length > 0 && !linkMetadata && !isFetchingMetadata && !mediaUri) {
+        const fetchMetadata = async () => {
+            setIsFetchingMetadata(true);
+            try {
+                const metadata = await apiClient.fetchLinkMetadata(urls[0]);
+                setLinkMetadata(metadata);
+            } catch (error) {
+                console.error('Failed to fetch link metadata:', error);
+            } finally {
+                setIsFetchingMetadata(false);
+            }
+        };
+        fetchMetadata();
+    }
+  }, [content, linkMetadata, isFetchingMetadata, mediaUri]);
 
   const handlePickMedia = async (type: 'image' | 'video') => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: type === 'video' ? ['videos'] : ['images'],
         allowsEditing: true,
-        aspect: [4, 3],
+        aspect: postType === 'reel' ? [9, 16] : [4, 3],
         quality: 0.8,
       });
 
       if (!result.canceled) {
         setMediaUri(result.assets[0].uri);
         setMediaType(type);
-        setShowPollInput(false); // Can't have media and poll same time usually, or just simplifying
+        setShowPollInput(false);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+        // Validate constraints
+        const asset = result.assets[0];
+        
+        // 1. Size Check (Max 100MB) - fileSize is in bytes
+        const MAX_SIZE_MB = 100;
+        if (asset.fileSize && asset.fileSize > MAX_SIZE_MB * 1024 * 1024) {
+             Alert.alert('File too large', `Video must be under ${MAX_SIZE_MB}MB`);
+             return;
+        }
+
+        // 2. Duration Check (Max 60s for Reels)
+        if (type === 'video' && asset.duration && asset.duration > 60000) {
+            Alert.alert('Video too long', 'Reels must be under 60 seconds');
+            return;
+        }
+
+        setMediaUri(asset.uri);
+        setMediaType(type);
+        setShowPollInput(false);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        
+        // Auto-switch to Reel if video
+        if (type === 'video') {
+            setPostType('reel');
+        }
       }
     } catch (error) {
       console.error('Failed to pick media:', error);
@@ -67,7 +130,8 @@ export default function CreatePostScreen() {
     } else {
       setShowPollInput(true);
       setPollOptions(['', '']);
-      setMediaUri(null); // Clear media if starting poll
+      setMediaUri(null);
+      setPostType('post'); // Polls are only for posts
     }
   };
 
@@ -76,42 +140,54 @@ export default function CreatePostScreen() {
       return;
     }
 
+    if (postType === 'reel' && (!mediaUri || mediaType !== 'video')) {
+      Alert.alert('Error', 'Reels must include a video');
+      return;
+    }
+
     setIsLoading(true);
+    setUploadProgress(0);
     try {
       // Upload media if present
       let uploadedMediaUrl: string | undefined;
       if (mediaUri) {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          uploadedMediaUrl = await apiClient.uploadMedia(
+          setUploadProgress(1); // Start progress
+          uploadedMediaUrl = await apiClient.uploadMediaWithProgress(
             mediaUri,
-            'posts',
-            `${user.id}/${Date.now()}`
+            postType === 'reel' ? 'reels' : 'posts',
+            `${user.id}/${Date.now()}`,
+            (progress) => setUploadProgress(progress)
           );
         }
       }
 
-      // Determine post type
-      let type: PostType = 'text';
-      if (uploadedMediaUrl) type = mediaType;
-      else if (showPollInput) type = 'poll';
-      // Basic link detection could go here too
+      // Determine final type
+      let type: 'post' | 'reel' | 'poll' = postType;
+      if (showPollInput) type = 'poll';
 
+      setUploadProgress(90);
       await apiClient.createPost({
         type,
         content: content.trim(),
         mediaUrl: uploadedMediaUrl,
+        linkUrl: linkMetadata?.url,
+        linkMetadata: linkMetadata,
         pollOptions: showPollInput ? pollOptions.filter(o => o.trim()) : undefined,
       });
 
-      // Reward user with coins
-      addCoins(10, 'Created a post');
+      // Reward user with coins - bonus for reels
+      addCoins(type === 'reel' ? 25 : 10, `Created a ${type}`);
 
+      setUploadProgress(100);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.back();
+      // Replace ensures we don't have navigation "ghosts" and fixes the GO_BACK error
+      router.replace('/');
     } catch (error) {
       console.error('Failed to create post:', error);
       Alert.alert('Error', 'Failed to create post. Please try again.');
+      setUploadProgress(0);
     } finally {
       setIsLoading(false);
     }
@@ -146,7 +222,14 @@ export default function CreatePostScreen() {
           style={[styles.postButton, isPostDisabled && styles.postButtonDisabled]}
         >
           {isLoading ? (
-            <ActivityIndicator color="#FFF" size="small" />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <ActivityIndicator color="#FFF" size="small" />
+              {uploadProgress > 0 && (
+                <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '600' }}>
+                  {uploadProgress}%
+                </Text>
+              )}
+            </View>
           ) : (
             <Text style={styles.postButtonText}>Post</Text>
           )}
@@ -158,6 +241,29 @@ export default function CreatePostScreen() {
         contentContainerStyle={{ paddingBottom: 100 }}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Type Selector */}
+        <View style={styles.typeSelector}>
+          <TouchableOpacity
+            style={[styles.typeButton, postType === 'post' && styles.typeButtonActive]}
+            onPress={() => {
+              setPostType('post');
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <Text style={[styles.typeButtonText, postType === 'post' && styles.typeButtonActiveText]}>Post</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.typeButton, postType === 'reel' && styles.typeButtonActive]}
+            onPress={() => {
+              setPostType('reel');
+              setShowPollInput(false);
+              setPollOptions([]);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <Text style={[styles.typeButtonText, postType === 'reel' && styles.typeButtonActiveText]}>Reel</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.inputRow}>
           <Image
             source={{ uri: user?.avatar || 'https://via.placeholder.com/50' }}
@@ -185,6 +291,30 @@ export default function CreatePostScreen() {
               <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={24} color="#000" />
             </TouchableOpacity>
           </View>
+        )}
+
+        {/* Link Preview */}
+        {linkMetadata && (
+          <View style={styles.linkPreviewContainer}>
+            {linkMetadata.image && (
+                <Image source={{ uri: linkMetadata.image }} style={styles.linkImage} />
+            )}
+            <View style={styles.linkInfo}>
+                <Text style={styles.linkTitle} numberOfLines={1}>{linkMetadata.title}</Text>
+                <Text style={styles.linkDescription} numberOfLines={2}>{linkMetadata.description}</Text>
+                <Text style={styles.linkDomain}>{linkMetadata.domain}</Text>
+            </View>
+            <TouchableOpacity style={styles.removeLink} onPress={() => setLinkMetadata(null)}>
+              <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {isFetchingMetadata && (
+            <View style={styles.fetchingContainer}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.fetchingText}>Fetching link details...</Text>
+            </View>
         )}
 
         {/* Poll Input */}
@@ -357,5 +487,82 @@ const styles = StyleSheet.create({
   countText: {
     ...typography.caption,
     color: colors.textSecondary,
-  }
+  },
+  typeSelector: {
+    flexDirection: 'row',
+    margin: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.md,
+    padding: 4,
+  },
+  typeButton: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: borderRadius.sm,
+  },
+  typeButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  typeButtonText: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  typeButtonActiveText: {
+    color: '#FFF',
+  },
+  linkPreviewContainer: {
+    marginHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+    position: 'relative',
+    backgroundColor: colors.card,
+  },
+  linkImage: {
+    width: '100%',
+    height: 150,
+    backgroundColor: colors.border,
+  },
+  linkInfo: {
+    padding: spacing.sm,
+  },
+  linkTitle: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  linkDescription: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  linkDomain: {
+    ...typography.caption,
+    color: colors.primary,
+    marginTop: 4,
+    textTransform: 'lowercase',
+  },
+  removeLink: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 12,
+    padding: 2,
+  },
+  fetchingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
+  },
+  fetchingText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
 });

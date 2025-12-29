@@ -1,18 +1,20 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+console.log('[create-space] Module loading...');
+import { createClient } from "@supabase/supabase-js"
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
+    console.log('[create-space] Invoked');
     // Handle CORS
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
     try {
+        console.log('[create-space] Creating Supabase client');
         const supabaseClient = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -27,7 +29,11 @@ serve(async (req: Request) => {
         )
         if (userError || !user) throw new Error('Unauthorized')
 
-        const { title, type, description, isAudioOnly = true } = await req.json()
+        const body = await req.json()
+        console.log('[create-space] Request body:', JSON.stringify(body));
+
+        const { title, type, description, isAudioOnly, is_audio_only } = body
+        const finalIsAudioOnly = is_audio_only !== undefined ? is_audio_only : (isAudioOnly !== undefined ? isAudioOnly : true);
 
         if (!title) throw new Error('Title is required')
 
@@ -40,8 +46,13 @@ serve(async (req: Request) => {
 
         if (countError) throw countError
         if (count && count >= 5) {
+            console.warn(`[create-space] Rate limit hit for user ${user.id}. Current count: ${count}`);
             return new Response(
-                JSON.stringify({ error: 'Rate limit exceeded: You can only have 5 active spaces at a time.' }),
+                JSON.stringify({ 
+                    error: 'Rate limit exceeded',
+                    message: `You already have ${count} active spaces. Please end an existing space before creating a new one.`,
+                    count
+                }),
                 { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
@@ -52,6 +63,7 @@ serve(async (req: Request) => {
             : null
 
         // 3. Create space
+        console.log('[create-space] Inserting space into DB...');
         const { data: space, error: spaceError } = await supabaseClient
             .from('video_spaces')
             .insert({
@@ -59,23 +71,33 @@ serve(async (req: Request) => {
                 title,
                 description,
                 type,
-                is_audio_only: isAudioOnly,
+                is_audio_only: finalIsAudioOnly,
                 invite_code: inviteCode,
-                status: 'created'
+                status: 'live'
             })
             .select()
             .single()
 
-        if (spaceError) throw spaceError
+        if (spaceError) {
+            console.error('[create-space] DB Insert Error:', spaceError);
+            throw spaceError;
+        }
 
+        console.log('[create-space] Space created successfully:', space.id);
         return new Response(
             JSON.stringify(space),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+        console.error('[create-space] Catch Block Error:', error);
+        const err = error as Record<string, unknown>;
         return new Response(
-            JSON.stringify({ error: error.message || 'Unknown error' }),
+            JSON.stringify({ 
+                error: (err.message as string) || 'Unknown error',
+                details: (err.details as string) || (err.hint as string) || (err.stack as string) || null,
+                raw: err
+            }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
     }

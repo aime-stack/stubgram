@@ -12,12 +12,16 @@ import {
     Modal,
     ActivityIndicator,
     Switch,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
 } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
+import { colors, spacing, borderRadius, typography, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import { PremiumHeader } from '@/components/PremiumHeader';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
 import { VideoSpace } from '@/types';
@@ -77,6 +81,7 @@ export default function SpacesScreen() {
 
         try {
             // Call Supabase Edge Function for secure creation
+            console.log('[SpacesScreen] Creating space:', newRoomTitle);
             const { data, error } = await supabase.functions.invoke('create-space', {
                 body: {
                     title: newRoomTitle.trim(),
@@ -85,24 +90,40 @@ export default function SpacesScreen() {
                 },
             });
 
-            if (error) throw error;
+            console.log('[SpacesScreen] create-space response:', { data, error });
+
+            if (error) {
+                console.error('[SpacesScreen] Edge Function Error:', error);
+                throw error;
+            }
 
             setNewRoomTitle('');
             setShowCreateModal(false);
-            setIsCreating(false);
 
             // Navigate to the room
             router.push(`/spaces/${data.id}` as any);
         } catch (error: any) {
             console.error('Create room error:', error);
-            Alert.alert('Error', error.message || 'Failed to create room');
+            
+            // Log full error details for debugging
+            if (error.context) {
+                try {
+                    const responseBody = await error.context.json();
+                    console.error('[SpacesScreen] Error context body:', responseBody);
+                } catch (e) {
+                    console.error('[SpacesScreen] Could not parse error context');
+                }
+            }
+
+            const errorMessage = error.context?.error?.message || error.message || 'Failed to create space';
+            Alert.alert('Error', errorMessage);
+        } finally {
             setIsCreating(false);
         }
     };
 
     const handleJoinRoom = (room: VideoSpace) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        // Navigate to preview first (Milestone 5)
         router.push(`/spaces/preview/${room.id}` as any);
     };
 
@@ -114,7 +135,6 @@ export default function SpacesScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.roomGradient}
             >
-                {/* Room Header */}
                 <View style={styles.roomHeader}>
                     <View style={styles.liveBadge}>
                         <View style={styles.liveIndicator} />
@@ -126,16 +146,13 @@ export default function SpacesScreen() {
                     </View>
                 </View>
 
-                {/* Room Title */}
                 <Text style={styles.roomTitle} numberOfLines={2}>{item.title}</Text>
 
-                {/* Host Info */}
                 <View style={styles.hostInfo}>
                     <Image source={{ uri: item.host?.avatar || 'https://via.placeholder.com/50' }} style={styles.hostAvatar} />
                     <Text style={styles.hostName}>Hosted by @{item.host?.username || 'user'}</Text>
                 </View>
 
-                {/* Features Badge */}
                 <View style={styles.featuresRow}>
                     <View style={styles.featureTag}>
                         <IconSymbol
@@ -148,7 +165,6 @@ export default function SpacesScreen() {
                     </View>
                 </View>
 
-                {/* Join Button */}
                 <TouchableOpacity style={styles.joinButton} onPress={() => handleJoinRoom(item)}>
                     <IconSymbol
                         ios_icon_name={item.isAudioOnly ? "mic.fill" : "video.fill"}
@@ -165,24 +181,14 @@ export default function SpacesScreen() {
     );
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            <Stack.Screen
-                options={{
-                    title: 'Spaces',
-                    headerShown: true,
-                    headerStyle: { backgroundColor: colors.background },
-                    headerTintColor: colors.text,
-                }}
+        <View style={styles.container}>
+            <PremiumHeader 
+                title="Spaces" 
+                subtitle="Join or start a live video conversation"
+                iosIconName="video.fill"
+                androidIconName="videocam"
             />
-
-            {/* Header */}
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Active Spaces</Text>
-                <Text style={styles.headerSubtitle}>Low-bandwidth audio & video rooms</Text>
-            </View>
-
-            {/* Room List */}
-            {isLoading ? (
+            {isLoading && rooms.length === 0 ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={colors.primary} />
                 </View>
@@ -205,68 +211,94 @@ export default function SpacesScreen() {
                 />
             )}
 
-            {/* Create Room FAB */}
             <TouchableOpacity
-                style={styles.fab}
+                style={styles.floatingButton}
                 onPress={() => setShowCreateModal(true)}
             >
-                <IconSymbol ios_icon_name="plus" android_material_icon_name="add" size={28} color="#FFFFFF" />
+                <LinearGradient
+                    colors={[colors.primary, colors.secondary]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.floatingGradient}
+                >
+                    <IconSymbol ios_icon_name="plus" android_material_icon_name="add" size={32} color="#FFFFFF" />
+                </LinearGradient>
             </TouchableOpacity>
 
-            {/* Create Room Modal */}
             <Modal
                 visible={showCreateModal}
                 animationType="slide"
                 transparent
                 onRequestClose={() => setShowCreateModal(false)}
             >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Start a Space</Text>
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowCreateModal(false)}
+                >
+                    <View
+                        style={{ width: '100%', justifyContent: 'flex-end' }}
+                    >
+                        <TouchableOpacity
+                            activeOpacity={1}
+                            onPress={(e) => e.stopPropagation()}
+                            style={styles.modalContent}
+                        >
+                            <ScrollView
+                                bounces={false}
+                                showsVerticalScrollIndicator={false}
+                                contentContainerStyle={{ paddingBottom: spacing.md }}
+                                style={{ flexShrink: 1 }}
+                            >
+                                <View style={styles.modalIndicator} />
+                                <Text style={styles.modalTitle}>Start a Space</Text>
 
-                        <Text style={styles.inputLabel}>Title</Text>
-                        <TextInput
-                            style={styles.modalInput}
-                            placeholder="What's happening?"
-                            placeholderTextColor={colors.textSecondary}
-                            value={newRoomTitle}
-                            onChangeText={setNewRoomTitle}
-                            maxLength={100}
-                        />
+                                <Text style={styles.inputLabel}>Space Title</Text>
+                                <TextInput
+                                    style={styles.modalInput}
+                                    placeholder="What's happening?"
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={newRoomTitle}
+                                    onChangeText={setNewRoomTitle}
+                                    maxLength={100}
+                                    autoFocus
+                                />
 
-                        <View style={styles.toggleRow}>
-                            <View>
-                                <Text style={styles.toggleTitle}>Audio-First Mode</Text>
-                                <Text style={styles.toggleSubtitle}>Better for unstable networks</Text>
+                                <View style={styles.toggleRow}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.toggleTitle}>Audio-First Mode</Text>
+                                        <Text style={styles.toggleSubtitle}>Optimized for low-bandwidth. Video can be enabled later.</Text>
+                                    </View>
+                                    <Switch
+                                        value={isAudioOnly}
+                                        onValueChange={setIsAudioOnly}
+                                        trackColor={{ false: colors.border, true: colors.primary }}
+                                    />
+                                </View>
+                            </ScrollView>
+
+                            <View style={styles.modalButtons}>
+                                <TouchableOpacity
+                                    style={styles.modalCancelButton}
+                                    onPress={() => setShowCreateModal(false)}
+                                >
+                                    <Text style={styles.modalCancelText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.modalCreateButton, isCreating && styles.modalButtonDisabled]}
+                                    onPress={handleCreateRoom}
+                                    disabled={isCreating}
+                                >
+                                    {isCreating ? (
+                                        <ActivityIndicator color="#FFFFFF" size="small" />
+                                    ) : (
+                                        <Text style={styles.modalCreateText}>Go Live</Text>
+                                    )}
+                                </TouchableOpacity>
                             </View>
-                            <Switch
-                                value={isAudioOnly}
-                                onValueChange={setIsAudioOnly}
-                                trackColor={{ false: colors.border, true: colors.primary }}
-                            />
-                        </View>
-
-                        <View style={styles.modalButtons}>
-                            <TouchableOpacity
-                                style={styles.modalCancelButton}
-                                onPress={() => setShowCreateModal(false)}
-                            >
-                                <Text style={styles.modalCancelText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalCreateButton, isCreating && styles.modalButtonDisabled]}
-                                onPress={handleCreateRoom}
-                                disabled={isCreating}
-                            >
-                                {isCreating ? (
-                                    <ActivityIndicator color="#FFFFFF" size="small" />
-                                ) : (
-                                    <Text style={styles.modalCreateText}>Go Live</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
+                        </TouchableOpacity>
                     </View>
-                </View>
+                </TouchableOpacity>
             </Modal>
         </View>
     );
@@ -276,20 +308,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.background,
-    },
-    header: {
-        padding: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-    },
-    headerTitle: {
-        ...typography.h2,
-        color: colors.text,
-    },
-    headerSubtitle: {
-        ...typography.body,
-        color: colors.textSecondary,
-        marginTop: 4,
     },
     loadingContainer: {
         flex: 1,
@@ -413,21 +431,21 @@ const styles = StyleSheet.create({
         color: colors.textSecondary,
         marginTop: spacing.xs,
     },
-    fab: {
+    floatingButton: {
         position: 'absolute',
-        right: spacing.lg,
-        bottom: spacing.lg + 60,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: colors.primary,
+        bottom: 100,
+        right: 20,
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        ...shadows.lg,
+    },
+    floatingGradient: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 32,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
     },
     modalOverlay: {
         flex: 1,
@@ -439,11 +457,20 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: borderRadius.lg,
         borderTopRightRadius: borderRadius.lg,
         padding: spacing.xl,
+        maxHeight: '80%',
+    },
+    modalIndicator: {
+        width: 40,
+        height: 4,
+        backgroundColor: colors.border,
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: spacing.md,
     },
     modalTitle: {
         ...typography.h3,
         color: colors.text,
-        marginBottom: spacing.lg,
+        marginBottom: spacing.xl,
         textAlign: 'center',
     },
     inputLabel: {
@@ -511,4 +538,3 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
 });
-

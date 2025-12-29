@@ -32,7 +32,7 @@ export default function PrivacyPolicyScreen() {
                 <Text style={styles.sectionTitle}>1. Information We Collect</Text>
                 <Text style={styles.paragraph}>
                     We collect information you provide directly to us, including your name, email address,
-                    profile information, and content you create on SnapGram. We also collect information
+                    profile information, and content you create on Stubgram. We also collect information
                     about your usage of our services.
                 </Text>
 
@@ -77,7 +77,7 @@ export default function PrivacyPolicyScreen() {
                 <Text style={styles.paragraph}>
                     If you have any questions about this Privacy Policy, please contact us at:
                 </Text>
-                <Text style={styles.email}>help@snapgram.com</Text>
+                <Text style={styles.email}>help@Stubgram.com</Text>
             </ScrollView>
         </View>
     );

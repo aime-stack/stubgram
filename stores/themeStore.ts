@@ -20,22 +20,31 @@ const getSystemTheme = (): boolean => {
 export const useThemeStore = create<ThemeState>()(
     persist(
         (set, get) => ({
-            mode: 'dark' as ThemeMode, // Default to dark
-            isDark: true, // Default to dark
+            mode: 'system' as ThemeMode,
+            isDark: getSystemTheme(),
 
             setMode: (mode: ThemeMode) => {
-                // Force dark mode regardless of input
-                set({ mode: 'dark', isDark: true });
+                const isDark = mode === 'system' ? getSystemTheme() : mode === 'dark';
+                set({ mode, isDark });
             },
 
             toggleTheme: () => {
-                // Disable toggling
-                set({ mode: 'dark', isDark: true });
+                const { mode, isDark } = get();
+                const newIsDark = !isDark;
+                set({ mode: newIsDark ? 'dark' : 'light', isDark: newIsDark });
             },
 
             initializeTheme: () => {
-                set({ isDark: true });
-                // Remove system theme listener since we're locking to dark
+                const { mode } = get();
+                const isDark = mode === 'system' ? getSystemTheme() : mode === 'dark';
+                set({ isDark });
+
+                // Listen for system theme changes
+                Appearance.addChangeListener(({ colorScheme }) => {
+                    if (get().mode === 'system') {
+                        set({ isDark: colorScheme === 'dark' });
+                    }
+                });
             },
         }),
         {
@@ -51,7 +60,7 @@ export const lightColors = {
     background: '#FFFFFF',
     text: '#1A1A1A',
     textSecondary: '#6B7280',
-    primary: '#8B5CF6',
+    primary: '#0a7ea4',
     secondary: '#EC4899',
     accent: '#F59E0B',
     card: '#F9FAFB',
@@ -61,33 +70,33 @@ export const lightColors = {
     border: '#E5E7EB',
     divider: '#F3F4F6',
     gradients: [
-        ['#8B5CF6', '#EC4899'],
+        ['#0a7ea4', '#EC4899'],
         ['#EC4899', '#F59E0B'],
-        ['#10B981', '#8B5CF6'],
+        ['#10B981', '#0a7ea4'],
         ['#F59E0B', '#EC4899'],
-        ['#8B5CF6', '#10B981'],
+        ['#0a7ea4', '#10B981'],
     ],
 };
 
 export const darkColors = {
-    background: '#0F0F0F',
-    text: '#FFFFFF',
-    textSecondary: '#9CA3AF',
-    primary: '#A78BFA',
+    background: '#F9FAFB', // Light background even in "dark" mode as requested
+    text: '#1A1A1A',       // Dark text for contrast
+    textSecondary: '#6B7280',
+    primary: '#0a7ea4',
     secondary: '#F472B6',
     accent: '#FBBF24',
-    card: '#1F1F1F',
+    card: '#FFFFFF',       // White cards
     highlight: '#34D399',
     error: '#F87171',
     warning: '#FBBF24',
-    border: '#374151',
-    divider: '#2D2D2D',
+    border: '#E5E7EB',
+    divider: '#F3F4F6',
     gradients: [
-        ['#A78BFA', '#F472B6'],
+        ['#1A1A1A', '#F472B6'], // Adjusted gradients for light background
         ['#F472B6', '#FBBF24'],
-        ['#34D399', '#A78BFA'],
+        ['#34D399', '#1A1A1A'],
         ['#FBBF24', '#F472B6'],
-        ['#A78BFA', '#34D399'],
+        ['#1A1A1A', '#34D399'],
     ],
 };
 

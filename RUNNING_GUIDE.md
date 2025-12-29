@@ -1,4 +1,4 @@
-# Running SnapGram with Video Spaces
+# Running StubGram with Video Spaces
 
 > [!WARNING]
 > **You cannot use the standard Expo Go app** from the App Store/Play Store for this project.
@@ -43,3 +43,4 @@ If you have android Studio configured on this Windows machine:
 
 ## Why?
 The standard Expo Go app only contains a fixed set of native libraries. Features like **Background Location**, **Bluetooth**, and **LiveKit WebRTC** require changing the native code, which requires a "Prebuild" or "Development Build".
+
