@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Switch, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Switch, ScrollView, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
@@ -7,8 +7,11 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { apiClient } from '@/services/api';
 import { useThemeStore, darkColors, lightColors } from '@/stores/themeStore';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '@/lib/supabase';
 
 export default function CreateCommunityScreen() {
+  console.log('CreateCommunityScreen mounting, StyleSheet available:', !!StyleSheet);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isDark } = useThemeStore();
@@ -18,6 +21,27 @@ export default function CreateCommunityScreen() {
   const [description, setDescription] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [coverUri, setCoverUri] = useState<string | null>(null);
+
+  const handlePickImage = async (type: 'avatar' | 'cover') => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: type === 'avatar' ? [1, 1] : [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        if (type === 'avatar') setAvatarUri(result.assets[0].uri);
+        else setCoverUri(result.assets[0].uri);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    } catch (error) {
+      console.error('Failed to pick image:', error);
+    }
+  };
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -34,10 +58,35 @@ export default function CreateCommunityScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (!authUser) throw new Error('Not authenticated');
+
+        // Upload images if selected
+        let uploadedAvatarUrl: string | undefined;
+        let uploadedCoverUrl: string | undefined;
+
+        if (avatarUri) {
+            uploadedAvatarUrl = await apiClient.uploadMedia(
+                avatarUri,
+                'posts', // reusing posts bucket
+                `${authUser.id}/community_avatar_${Date.now()}`
+            );
+        }
+
+        if (coverUri) {
+            uploadedCoverUrl = await apiClient.uploadMedia(
+                coverUri,
+                'posts', // reusing posts bucket
+                `${authUser.id}/community_cover_${Date.now()}`
+            );
+        }
+
       const { data: community } = await apiClient.createCommunity({
         name: name.trim(),
         description: description.trim() || undefined,
         isPrivate,
+        avatarUrl: uploadedAvatarUrl,
+        coverUrl: uploadedCoverUrl,
       });
 
       Alert.alert(
@@ -75,6 +124,36 @@ export default function CreateCommunityScreen() {
 
         {/* Form */}
         <View style={styles.form}>
+            {/* Image Pickers */}
+            <View style={styles.imagePickersContainer}>
+                {/* Cover Image */}
+                <TouchableOpacity 
+                    style={[styles.coverPicker, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} 
+                    onPress={() => handlePickImage('cover')}
+                >
+                    {coverUri ? (
+                        <Image source={{ uri: coverUri }} style={styles.coverImage} />
+                    ) : (
+                        <View style={styles.placeholderContainer}>
+                            <IconSymbol ios_icon_name="camera.fill" android_material_icon_name="camera-alt" size={24} color={themeColors.textSecondary} />
+                            <Text style={[styles.placeholderText, { color: themeColors.textSecondary }]}>Add Cover Photo</Text>
+                        </View>
+                    )}
+                </TouchableOpacity>
+
+                {/* Avatar Image (Overlapping) */}
+                <TouchableOpacity 
+                    style={[styles.avatarPicker, { backgroundColor: themeColors.card, borderColor: themeColors.border }]} 
+                    onPress={() => handlePickImage('avatar')}
+                >
+                    {avatarUri ? (
+                        <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                    ) : (
+                        <IconSymbol ios_icon_name="person.crop.circle.badge.plus" android_material_icon_name="add-a-photo" size={32} color={themeColors.textSecondary} />
+                    )}
+                </TouchableOpacity>
+            </View>
+
           <View style={styles.section}>
             <Text style={[styles.label, { color: themeColors.text }]}>Community Name *</Text>
             <View style={[styles.inputContainer, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
@@ -281,5 +360,46 @@ const styles = StyleSheet.create({
   guidelinesText: {
     ...typography.caption,
     lineHeight: 20,
+  },
+  imagePickersContainer: {
+      marginBottom: spacing.xl,
+      alignItems: 'center',
+  },
+  coverPicker: {
+      width: '100%',
+      height: 150,
+      borderRadius: borderRadius.md,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      overflow: 'hidden',
+      justifyContent: 'center',
+      alignItems: 'center',
+  },
+  coverImage: {
+      width: '100%',
+      height: '100%',
+  },
+  placeholderContainer: {
+      alignItems: 'center',
+      gap: spacing.xs,
+  },
+  placeholderText: {
+      ...typography.caption,
+      fontWeight: '600',
+  },
+  avatarPicker: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      borderWidth: 4,
+      marginTop: -50, // Overlap
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 1,
+  },
+  avatarImage: {
+      width: '100%',
+      height: '100%',
+      borderRadius: 50,
   },
 });

@@ -69,11 +69,20 @@ export default function MeetingRoomScreen() {
         body: { meetingId },
       });
 
-      console.log('[MeetingRoomScreen] generate-token response:', { data, error });
+      console.log('[MeetingRoomScreen] generate-token raw response:', { 
+        data: data ? 'present' : 'missing', 
+        error: error ? error : 'none',
+        hasToken: data?.token ? 'yes' : 'no'
+      });
 
       if (error) {
-        console.error('[MeetingRoomScreen] generate-token error:', error);
+        console.error('[MeetingRoomScreen] generate-token INVOKE error:', error);
         throw error;
+      }
+
+      if (!data || !data.token) {
+        console.error('[MeetingRoomScreen] generate-token missing token in data:', data);
+        throw new Error('Server returned success but no token received.');
       }
 
       // Connect to LiveKit

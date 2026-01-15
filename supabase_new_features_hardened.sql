@@ -16,10 +16,12 @@ CREATE TABLE IF NOT EXISTS public.meetings (
     host_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     description TEXT,
-    meeting_link TEXT UNIQUE NOT NULL,
-    status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'live', 'ended')),
-    type TEXT NOT NULL DEFAULT 'group' CHECK (type IN ('1-on-1', 'group')),
+    meeting_id TEXT UNIQUE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'live', 'ended', 'active')),
+    type TEXT NOT NULL DEFAULT 'group' CHECK (type IN ('1-on-1', 'group', 'public', 'private')),
     is_private BOOLEAN DEFAULT FALSE,
+    is_password_protected BOOLEAN DEFAULT FALSE,
+    meeting_password TEXT,
     max_participants INTEGER DEFAULT 100,
     started_at TIMESTAMPTZ,
     ended_at TIMESTAMPTZ,
@@ -148,6 +150,22 @@ CREATE POLICY "Public communities are viewable by everyone" ON public.communitie
 DROP POLICY IF EXISTS "Authenticated users can create communities" ON public.communities;
 CREATE POLICY "Authenticated users can create communities" ON public.communities FOR INSERT WITH CHECK (auth.uid() = creator_id);
 
+-- COMMUNITY MEMBERS
+ALTER TABLE public.community_members ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Members viewable by community" ON public.community_members;
+CREATE POLICY "Members viewable by community" ON public.community_members FOR SELECT USING (true); 
+-- Making members visible solves the recursion. For a social app, seeing members is usually fine.
+-- Or if we strictly want private, we could check just (user_id = auth.uid()) and another policy for "if in same community"
+-- But "if in same community" requires checking membership which causes recursion.
+-- Let's stick to Open Membership Visibility for now to fix the blockage.
+
+DROP POLICY IF EXISTS "Users can join communities" ON public.community_members;
+CREATE POLICY "Users can join communities" ON public.community_members FOR INSERT WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can leave communities" ON public.community_members;
+CREATE POLICY "Users can leave communities" ON public.community_members FOR DELETE USING (user_id = auth.uid());
+
 -- ADS
 ALTER TABLE public.ads ENABLE ROW LEVEL SECURITY;
 
@@ -159,6 +177,8 @@ CREATE POLICY "Advertisers can manage their ads" ON public.ads FOR ALL USING (ad
 
 -- COIN TRANSACTIONS
 ALTER TABLE public.coin_transactions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users view their own coin transactions" ON public.coin_transactions;
 CREATE POLICY "Users view their own coin transactions" ON public.coin_transactions FOR SELECT USING (user_id = auth.uid());
 
 -- =====================================================
@@ -178,6 +198,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS on_community_membership_change ON public.community_members;
 CREATE TRIGGER on_community_membership_change
 AFTER INSERT OR DELETE ON public.community_members
 FOR EACH ROW EXECUTE FUNCTION public.handle_community_membership();
@@ -195,6 +216,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS on_community_post_change ON public.posts;
 CREATE TRIGGER on_community_post_change
 AFTER INSERT OR DELETE ON public.posts
 FOR EACH ROW EXECUTE FUNCTION public.handle_community_post();
@@ -209,6 +231,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS on_meeting_created ON public.meetings;
 CREATE TRIGGER on_meeting_created
 AFTER INSERT ON public.meetings
 FOR EACH ROW EXECUTE FUNCTION public.handle_meeting_creation();

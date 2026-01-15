@@ -132,10 +132,10 @@ export default function JoinMeetingScreen() {
 
             <TouchableOpacity
               style={styles.quickActionButton}
-              onPress={() => router.push('/meetings')}
+              onPress={() => router.back()}
             >
               <IconSymbol ios_icon_name="list.bullet" android_material_icon_name="list" size={20} color="#FFF" />
-              <Text style={styles.quickActionText}>My Meetings</Text>
+              <Text style={styles.quickActionText}>Go Back</Text>
             </TouchableOpacity>
           </View>
         </View>

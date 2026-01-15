@@ -19,7 +19,7 @@ import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles
 import { useAuthStore } from '@/stores/authStore';
 import { IconSymbol } from '@/components/IconSymbol';
 
-const SG_LOGO = require('@/assets/images/stubgram-icon.png');
+const SG_LOGO = require('@/assets/images/logo.png');
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   logoContainer: {
     width: 100,
     height: 100,
-    borderRadius: 50,
+    borderRadius: 25,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',

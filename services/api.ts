@@ -170,13 +170,17 @@ class ApiClient {
   async createPost(data: {
     type: string;
     content?: string;
-    mediaUrl?: string; // image_url
+    mediaUrl?: string; // Single media (legacy)
     videoUrl?: string; // video_url
     thumbnailUrl?: string;
     linkUrl?: string;
     linkMetadata?: any;
     mediaMetadata?: any;
     pollOptions?: string[];
+    communityId?: string;
+    aspectRatio?: number;
+    originalMetadata?: any;
+    mediaUrls?: Array<{ url: string; type: 'image' | 'video'; aspectRatio: number }>; // Carousel support
   }) {
     const user = await this.requireAuth();
 
@@ -184,6 +188,7 @@ class ApiClient {
       .from('posts')
       .insert({
         user_id: user.id,
+        community_id: data.communityId,
         type: data.type,
         content: data.content,
         image_url: data.mediaUrl,
@@ -193,6 +198,9 @@ class ApiClient {
         link_metadata: data.linkMetadata,
         media_metadata: data.mediaMetadata,
         poll_options: data.pollOptions ? JSON.stringify(data.pollOptions) : undefined,
+        aspect_ratio: data.aspectRatio,
+        original_metadata: data.originalMetadata,
+        media_urls: data.mediaUrls ? JSON.stringify(data.mediaUrls) : undefined,
       })
       .select('*')
       .single();
@@ -209,6 +217,7 @@ class ApiClient {
     let query = supabase
       .from('posts')
       .select('*')
+      .is('community_id', null) // Exclude community posts from home feed
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -218,24 +227,53 @@ class ApiClient {
 
     const { data: posts, error } = await query;
 
-    if (error) throw error;
-    if (!posts || posts.length === 0) {
-      return { data: [], hasMore: false };
-    }
-
-    // Get unique user IDs from posts
-    const userIds = [...new Set(posts.map(p => p.user_id))];
-
-    // Fetch all profiles at once
-    const profiles = await this.getProfilesByIds(userIds);
-    const profileMap = new Map(profiles.map(p => [p.id, p]));
-
-    return {
-      data: posts.map((p) => this.mapPost(p, profileMap.get(p.user_id))),
-      hasMore: posts.length === limit,
-      nextCursor: posts.length > 0 ? posts[posts.length - 1].created_at : null
-    };
+  if (error) throw error;
+  if (!posts || posts.length === 0) {
+    return { data: [], hasMore: false };
   }
+
+  // Get unique user IDs from posts (including authors of reshared posts if available)
+  const userIds = new Set(posts.map((p) => p.user_id));
+  const resharedPostIds = posts
+    .filter((p) => p.reshared_from)
+    .map((p) => p.reshared_from);
+
+  // Fetch original posts if there are any reshares
+  let originalPostsMap = new Map();
+  if (resharedPostIds.length > 0) {
+      const { data: originalPosts } = await supabase
+          .from('posts')
+          .select('*')
+          .in('id', resharedPostIds);
+      
+      if (originalPosts) {
+          originalPosts.forEach(op => {
+              originalPostsMap.set(op.id, op);
+              userIds.add(op.user_id); // Add original author to profile fetch list
+          });
+      }
+  }
+
+  // Fetch all profiles at once
+  const profiles = await this.getProfilesByIds([...userIds]);
+  const profileMap = new Map(profiles.map((p) => [p.id, p]));
+
+  return {
+    data: posts.map((p) => {
+        let originalPost = undefined;
+        if (p.reshared_from) {
+            const op = originalPostsMap.get(p.reshared_from);
+            if (op) {
+                // Map the nested original post recursively (without infinite depth)
+                originalPost = this.mapPost(op, profileMap.get(op.user_id));
+            }
+        }
+        return this.mapPost(p, profileMap.get(p.user_id), originalPost);
+    }),
+    hasMore: posts.length === limit,
+    nextCursor: posts.length > 0 ? posts[posts.length - 1].created_at : null
+  };
+}
 
   async fetchLinkMetadata(url: string) {
     const { data: { session } } = await supabase.auth.getSession();
@@ -432,6 +470,21 @@ class ApiClient {
 
   // --- Users / Profiles ---
 
+  async getCelebrities() {
+    // 1. Get profiles where is_celebrity = true
+    const { data: profiles, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('is_celebrity', true)
+      .order('followers_count', { ascending: false });
+
+    if (error) throw error;
+
+    return {
+      data: (profiles || []).map((p) => this.mapProfile(p)),
+    };
+  }
+
   async getUserProfile(userId: string) {
     const profile = await this.getProfileById(userId);
     return { data: profile };
@@ -442,6 +495,7 @@ class ApiClient {
       .from('posts')
       .select('*')
       .eq('user_id', userId)
+      .is('community_id', null) // Exclude community posts from profile
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -635,12 +689,14 @@ class ApiClient {
 
   // --- Mappers ---
 
-  private mapPost(row: any, profile?: User): Post {
+  private mapPost(row: any, profile?: User, originalPost?: Post): Post {
     return {
       id: row.id,
       userId: row.user_id,
       user: profile || ({} as User),
-      type: row.type || 'text',
+      type: row.reshared_from ? 'reshare' : (row.type || 'text'), // Infer type if it's a reshare
+      originalPost: originalPost,
+      resharedFrom: row.reshared_from,
       content: row.content,
       mediaUrl: row.video_url || row.image_url,
       videoUrl: row.video_url,
@@ -661,6 +717,8 @@ class ApiClient {
       processed_url: row.processed_url,
       duration: row.duration,
       resolution: row.resolution,
+      linkPreview: row.link_metadata,
+      aspectRatio: row.aspect_ratio || 1.0, 
     };
   }
 
@@ -693,6 +751,13 @@ class ApiClient {
       followingCount: row.following_count || 0,
       postsCount: row.posts_count || 0,
       createdAt: row.created_at || new Date().toISOString(),
+      coins: row.coins || 0,
+      accountType: row.account_type || 'regular',
+      // New fields for Celebrity Chat
+      category: row.category,
+      messagePrice: row.message_price,
+      rating: row.rating ? parseFloat(row.rating) : undefined,
+      isOnline: row.is_online,
     } as User;
   }
 
@@ -940,19 +1005,7 @@ class ApiClient {
     };
   }
 
-  async getCelebrities() {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('is_celebrity', true)
-      .order('followers_count', { ascending: false });
 
-    if (error) throw error;
-
-    // If no celebrities from DB, fallback to empty array (the UI has mocks currently, we want to replace them)
-    // But we will populate DB with SQL script.
-    return { data: (data || []).map(p => this.mapProfile(p)) };
-  }
 
   async searchUsers(query: string) {
     const { data, error } = await supabase
@@ -1675,13 +1728,6 @@ class ApiClient {
 
     if (error) throw error;
 
-    // Add host as participant
-    await supabase.from('meeting_participants').insert({
-      meeting_id: meeting.id,
-      user_id: user.id,
-      role: 'host',
-    });
-
     const profile = await this.getProfileById(user.id);
     return { data: this.mapMeeting(meeting, profile) };
   }
@@ -1827,6 +1873,7 @@ class ApiClient {
     description?: string;
     isPrivate: boolean;
     avatarUrl?: string;
+    coverUrl?: string;
   }) {
     const user = await this.requireAuth();
 
@@ -1841,6 +1888,7 @@ class ApiClient {
         slug,
         description: data.description,
         avatar_url: data.avatarUrl,
+        cover_url: data.coverUrl,
         is_private: data.isPrivate,
       })
       .select('*')
@@ -2154,7 +2202,7 @@ class ApiClient {
     content: string;
     mediaUrl?: string;
     linkUrl?: string;
-    budgetRwf: number;
+    budgetCoins: number;
     durationType: 'hour' | 'day' | 'month' | 'year';
     startsAt: string;
     expiresAt: string;
@@ -2167,9 +2215,10 @@ class ApiClient {
         advertiser_id: user.id,
         title: data.title,
         content: data.content,
-        media_url: data.mediaUrl,
+        budget_coins: data.budgetCoins,
+        budget_rwf: 0, // Fallback for legacy column
         link_url: data.linkUrl,
-        budget_rwf: data.budgetRwf,
+
         duration_type: data.durationType,
         starts_at: data.startsAt,
         expires_at: data.expiresAt,

@@ -5,6 +5,7 @@ import { apiClient } from '@/services/api';
 import { socketService } from '@/services/socket';
 import { Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { supabase } from '@/lib/supabase';
 
 interface WalletState {
   balance: number;
@@ -29,22 +30,51 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   fetchWallet: async () => {
     try {
       set({ isLoading: true });
-      const response = await apiClient.getWallet();
-      set({ balance: response.data.balance, isLoading: false });
-      console.log('Wallet fetched:', response.data.balance);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('coins')
+        .eq('id', user.id)
+        .single();
+      
+      if (error) throw error;
+
+      // @ts-ignore
+      set({ balance: profile?.coins || 0, isLoading: false }); 
     } catch (error) {
       console.error('Failed to fetch wallet:', error);
-      // Set default balance if no wallet exists
-      set({ balance: 100, isLoading: false });
+      set({ isLoading: false });
     }
   },
 
   fetchTransactions: async () => {
     try {
-      const response = await apiClient.getTransactions();
-      const data = response.data.data || [];
-      set({ transactions: data });
-      console.log('Transactions fetched:', data.length);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: txs, error } = await supabase
+        .from('points_ledger')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      // Map to WalletTransaction type
+      const mappedTxs: WalletTransaction[] = (txs || []).map(tx => ({
+          id: tx.id,
+          userId: tx.user_id,
+          amount: tx.amount,
+          type: tx.amount > 0 ? 'reward' : 'spend', // Simple heuristic
+          description: tx.reason,
+          status: 'SUCCESS',
+          createdAt: tx.created_at
+      }));
+
+      set({ transactions: mappedTxs });
     } catch (error) {
       console.error('Failed to fetch transactions:', error);
       set({ transactions: [] });
@@ -89,19 +119,19 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   addCoins: (amount: number, description: string, showNotification = true) => {
-    const currentBalance = get().balance;
-    const newBalance = currentBalance + amount;
-
-    set({
-      balance: newBalance,
-      lastReward: { amount, description },
-    });
-
-    console.log(`💰 +${amount} coins: ${description} (Balance: ${newBalance})`);
+    // Optimistically update or just notify? 
+    // V2 Requirement: Backend validation. We should NOT update balance locally 
+    // until we fetch it from server. But for UX, we show the notification.
+    
+    // We do NOT update this.balance here anymore to prevent drift.
+    // The socket or next fetch will update it.
+    
+    console.log(`💰 [Optimistic] +${amount} coins: ${description}`);
 
     // Haptic feedback for rewards
-    if (amount > 0) {
+    if (amount > 0 && showNotification) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Ideally show a toast here
     }
   },
 

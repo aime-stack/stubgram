@@ -2,13 +2,13 @@
   "expo": {
     "name": "Stubgram",
     "slug": "stubgram",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
-    "icon": "./assets/images/stubgram-icon.png",
+    "icon": "./assets/images/logo.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/stubgram-icon.png",
+      "image": "./assets/images/logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff",
       "dark": {
@@ -19,16 +19,25 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.Stubgram",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "We need access to your camera to let you share video in meetings.",
+        "NSMicrophoneUsageDescription": "We need access to your microphone to let you speak in meetings."
       }
     },
     "android": {
+      "versionCode": 2,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/stubgram-icon.png",
+        "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.Stubgram"
+      "package": "com.anonymous.Stubgram",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
@@ -38,7 +47,6 @@
       "expo-font",
       "expo-router",
       "expo-web-browser",
-      "expo-video",
       "expo-audio"
     ],
     "scheme": "natively",

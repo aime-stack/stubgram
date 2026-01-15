@@ -36,28 +36,30 @@ export default function CommunityDetailScreen() {
         setIsLoading(true);
       }
 
-      const [communityRes, postsRes, membersRes] = await Promise.all([
-        apiClient.getCommunityBySlug(slug),
-        apiClient.getCommunityPosts(''), // We'll need to get the ID first
-        apiClient.getCommunityMembers(''),
+      // 1. Fetch community details first to get the ID
+      const { data: communityData } = await apiClient.getCommunityBySlug(slug);
+      
+      if (!communityData) {
+        throw new Error('Community not found');
+      }
+
+      setCommunity(communityData);
+
+      // 2. Fetch posts and members using the valid ID
+      const [postsRes, membersRes] = await Promise.all([
+        apiClient.getCommunityPosts(communityData.id),
+        apiClient.getCommunityMembers(communityData.id),
       ]);
 
-      setCommunity(communityRes.data);
+      setPosts(postsRes.data || []);
+      setMembers(membersRes.data || []);
 
-      // Now fetch posts and members with the correct ID
-      if (communityRes.data) {
-        const [actualPosts, actualMembers] = await Promise.all([
-          apiClient.getCommunityPosts(communityRes.data.id),
-          apiClient.getCommunityMembers(communityRes.data.id),
-        ]);
-        setPosts(actualPosts.data);
-        setMembers(actualMembers.data);
-      }
     } catch (error) {
       console.error('Failed to load community:', error);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
+
     }
   };
 
@@ -219,7 +221,12 @@ export default function CommunityDetailScreen() {
         <Text style={[styles.topBarTitle, { color: themeColors.text }]} numberOfLines={1}>
           {community.name}
         </Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity 
+            onPress={() => router.push({ pathname: '/create-post', params: { communityId: community.id } })} 
+            style={styles.backButton}
+        >
+            <IconSymbol ios_icon_name="plus" android_material_icon_name="add" size={24} color={themeColors.primary} />
+        </TouchableOpacity>
       </View>
 
       {activeTab === 'posts' ? (

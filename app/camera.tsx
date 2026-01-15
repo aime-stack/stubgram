@@ -8,6 +8,7 @@ import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // @ts-ignore
 import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system';
 
 const { width, height } = Dimensions.get('window');
 
@@ -65,6 +66,22 @@ export default function CameraScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  const saveToPersistentStorage = async (uri: string, type: 'image' | 'video') => {
+    try {
+      const filename = uri.split('/').pop();
+      // @ts-ignore
+      const newPath = (FileSystem.documentDirectory || '') + (filename || `capture_${Date.now()}.${type === 'image' ? 'jpg' : 'mp4'}`);
+      await FileSystem.moveAsync({
+        from: uri,
+        to: newPath
+      });
+      return newPath;
+    } catch (e) {
+      console.error('Failed to move file:', e);
+      return uri; // Fallback to cache uri
+    }
+  };
+
   const takePicture = async () => {
     if (!cameraRef.current || isCapturing) return;
     
@@ -77,11 +94,14 @@ export default function CameraScreen() {
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
-      // Navigate to create post with image
-      router.push({
-        pathname: '/create-post',
-        params: { mediaUri: photo?.uri, mediaType: 'image' }
-      });
+      if (photo?.uri) {
+          const persistentUri = await saveToPersistentStorage(photo.uri, 'image');
+          // Navigate to create post with image
+          router.push({
+            pathname: '/create-post',
+            params: { mediaUri: persistentUri, mediaType: 'image' }
+          });
+      }
     } catch (error) {
       console.error('Failed to take picture:', error);
       Alert.alert('Error', 'Failed to take photo');
@@ -98,14 +118,15 @@ export default function CameraScreen() {
     
     try {
       const video = await cameraRef.current.recordAsync({
-        maxDuration: 60,
+        maxDuration: 60, // V2: We might want to increase this, but keeping it safe for now.
       });
       
-      if (video) {
+      if (video?.uri) {
+        const persistentUri = await saveToPersistentStorage(video.uri, 'video');
         // Navigate to create post with video
         router.push({
             pathname: '/create-post',
-            params: { mediaUri: video.uri, mediaType: 'video' }
+            params: { mediaUri: persistentUri, mediaType: 'video' }
         });
       }
     } catch (error) {

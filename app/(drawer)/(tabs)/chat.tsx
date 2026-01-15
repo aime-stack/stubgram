@@ -12,13 +12,23 @@ export default function ChatScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const [conversations, setConversations] = useState<any[]>([]);
+    const [requests, setRequests] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [activeTab, setActiveTab] = useState<'primary' | 'requests'>('primary');
 
     const loadConversations = async () => {
         try {
             const { data } = await apiClient.getConversations();
-            setConversations(data);
+            // Filter conversations based on status (simulated or real)
+            // Ideally backend returns status. For now we can client-side filter if data includes it.
+            // If data doesn't have it yet, we just put all in primary for now to avoid crash.
+            
+            const primary = data.filter((c: any) => !c.status || c.status === 'active');
+            const pending = data.filter((c: any) => c.status === 'pending');
+            
+            setConversations(primary);
+            setRequests(pending);
         } catch (error) {
             console.error('Failed to load conversations:', error);
         } finally {
@@ -68,13 +78,30 @@ export default function ChatScreen() {
                 androidIconName="forum"
             />
 
+            <View style={styles.tabs}>
+                <TouchableOpacity 
+                    style={[styles.tab, activeTab === 'primary' && styles.activeTab]} 
+                    onPress={() => setActiveTab('primary')}
+                >
+                    <Text style={[styles.tabText, activeTab === 'primary' && styles.activeTabText]}>Primary</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                    style={[styles.tab, activeTab === 'requests' && styles.activeTab]} 
+                    onPress={() => setActiveTab('requests')}
+                >
+                    <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
+                        Requests {requests.length > 0 && `(${requests.length})`}
+                    </Text>
+                </TouchableOpacity>
+            </View>
+
             {isLoading ? (
                 <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
                     <ActivityIndicator size="large" color={colors.primary} />
                 </View>
             ) : (
                 <FlatList
-                    data={conversations}
+                    data={activeTab === 'primary' ? conversations : requests}
                     renderItem={renderItem}
                     keyExtractor={item => item.id}
                     contentContainerStyle={styles.listContent}
@@ -109,6 +136,32 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: spacing.lg,
         paddingBottom: spacing.md,
+    },
+    tabs: {
+        flexDirection: 'row',
+        paddingHorizontal: spacing.lg,
+        marginBottom: spacing.sm,
+        gap: spacing.md,
+    },
+    tab: {
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    activeTab: {
+        backgroundColor: colors.text,
+        borderColor: colors.text,
+    },
+    tabText: {
+        ...typography.caption,
+        fontWeight: '600',
+        color: colors.textSecondary,
+    },
+    activeTabText: {
+        color: colors.background,
     },
     premiumTitle: {
         ...typography.h1,

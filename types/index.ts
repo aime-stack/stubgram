@@ -17,6 +17,14 @@ export interface User {
   createdAt: string;
   updatedAt?: string;
   isFollowing?: boolean;
+  coins?: number;
+  accountType?: 'regular' | 'vip' | 'industry';
+  account_type?: 'regular' | 'premium' | 'vip' | 'industry'; // DB column match
+  // Celebrity Chat specific fields
+  category?: string;
+  messagePrice?: number;
+  rating?: number;
+  isOnline?: boolean;
 }
 
 export interface Post {
@@ -46,6 +54,8 @@ export interface Post {
   processed_url?: string;
   duration?: number;
   resolution?: string;
+  aspectRatio?: number; // New field for V2
+  mediaUrls?: Array<{ url: string; type: 'image' | 'video'; aspectRatio: number }>; // Carousel posts
   resharedFrom?: string;
   originalPost?: Post;
 }

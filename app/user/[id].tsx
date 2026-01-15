@@ -204,8 +204,11 @@ export default function UserProfileScreen() {
             <View style={styles.nameContainer}>
               <View style={styles.nameRow}>
                 <Text style={styles.username}>{user.full_name || user.username}</Text>
-                {user.isVerified && (
+                {user.account_type === 'premium' && (
                   <IconSymbol ios_icon_name="checkmark.seal.fill" android_material_icon_name="verified" size={20} color={colors.primary} />
+                )}
+                {(user.account_type === 'vip' || user.account_type === 'industry') && (
+                  <IconSymbol ios_icon_name="star.circle.fill" android_material_icon_name="stars" size={20} color="#FFD700" />
                 )}
               </View>
               <Text style={styles.handle}>@{user.username.toLowerCase()}</Text>

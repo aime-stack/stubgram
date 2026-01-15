@@ -159,7 +159,8 @@ app.post('/wallet/deposit', async (request: any) => {
             status: 'PENDING',
             paypackId: paypackResponse.ref,
             description: `Deposit via ${phoneNumber}`,
-            reference: paypackResponse.ref
+            reference: paypackResponse.ref,
+            fees: 0
         });
 
     return { message: "Deposit initiated. Please check your phone for confirmation.", ref: paypackResponse.ref };

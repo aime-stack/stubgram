@@ -1,14 +1,18 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, StyleSheet, FlatList, Dimensions, StatusBar, ViewToken, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, StatusBar, ViewToken, ActivityIndicator, Platform, useWindowDimensions, Dimensions } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReelItem } from '@/components/ReelItem';
 import { Reel, User } from '@/types';
 import { apiClient } from '@/services/api';
 
-const { width, height } = Dimensions.get('window');
+
+import { IconSymbol } from '@/components/IconSymbol';
+import { colors } from '@/styles/commonStyles';
 
 export default function ReelsScreen() {
+    const { height, width } = useWindowDimensions();
+    const router = useRouter();
     const insets = useSafeAreaInsets();
     const { id: initialReelId } = useLocalSearchParams<{ id: string }>();
     const [reels, setReels] = useState<Reel[]>([]);
@@ -68,15 +72,13 @@ export default function ReelsScreen() {
         itemVisiblePercentThreshold: 80
     }).current;
 
-    const reelHeight = height - (insets.bottom + 49); // 49 is approx tab bar height
-
     const renderItem = useCallback(({ item }: { item: Reel }) => (
         <ReelItem
             reel={item}
             isVisible={item.id === activeReelId}
-            containerHeight={reelHeight}
+            containerHeight={height}
         />
-    ), [activeReelId, reelHeight]);
+    ), [activeReelId, height]);
 
     if (loading && !refreshing) {
         return (
@@ -89,28 +91,40 @@ export default function ReelsScreen() {
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+            
+            {/* Header Actions */}
+            <View style={[styles.header, { top: insets.top }]}>
+                <Text style={styles.headerTitle}>Reels</Text>
+                <TouchableOpacity 
+                    style={styles.cameraButton}
+                    onPress={() => router.push({ pathname: '/create-post', params: { initialType: 'reel' } })}
+                >
+                    <IconSymbol ios_icon_name="camera" android_material_icon_name="camera-alt" size={26} color="#FFF" />
+                </TouchableOpacity>
+            </View>
+
             <FlatList
                 ref={listRef}
                 data={reels}
                 renderItem={renderItem}
                 keyExtractor={(item, index) => `${item.id || index}-${index}`}
                 pagingEnabled={true}
-                snapToInterval={reelHeight}
+                snapToInterval={height}
                 snapToAlignment="start"
                 decelerationRate="fast"
                 disableIntervalMomentum={true}
                 showsVerticalScrollIndicator={false}
                 onViewableItemsChanged={onViewableItemsChanged}
                 viewabilityConfig={viewabilityConfig}
-                removeClippedSubviews={Platform.OS === 'android'} // Better for smooth snapping on Android
+                removeClippedSubviews={Platform.OS === 'android'}
                 initialNumToRender={2}
                 maxToRenderPerBatch={2}
                 windowSize={5}
                 onRefresh={handleRefresh}
                 refreshing={refreshing}
                 getItemLayout={(_, index) => ({
-                    length: reelHeight,
-                    offset: reelHeight * index,
+                    length: height,
+                    offset: height * index,
                     index,
                 })}
             />
@@ -126,5 +140,30 @@ const styles = StyleSheet.create({
     centered: {
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    header: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        zIndex: 10,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+    },
+    headerTitle: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: '#FFF',
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 4,
+    },
+    cameraButton: {
+        padding: 8,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        borderRadius: 20,
+        backdropFilter: 'blur(10px)',
     }
 });

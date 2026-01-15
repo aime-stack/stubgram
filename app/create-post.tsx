@@ -31,9 +31,9 @@ export default function CreatePostScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const { addCoins } = useWalletStore();
-  const params = useLocalSearchParams<{ mediaUri?: string; mediaType?: 'image' | 'video' }>();
+  const params = useLocalSearchParams<{ mediaUri?: string; mediaType?: 'image' | 'video'; communityId?: string; initialType?: 'post' | 'reel' }>();
 
-  const [postType, setPostType] = useState<'post' | 'reel'>('post');
+  const [postType, setPostType] = useState<'post' | 'reel'>(params.initialType || 'post');
   const [content, setContent] = useState('');
   const [mediaUri, setMediaUri] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
@@ -76,46 +76,58 @@ export default function CreatePostScreen() {
     }
   }, [content, linkMetadata, isFetchingMetadata, mediaUri]);
 
+  const [aspectRatio, setAspectRatio] = useState(1.0);
+
+  // Multi-media state
+  const [selectedMedia, setSelectedMedia] = useState<Array<{ uri: string; type: 'image' | 'video'; aspectRatio: number }>>([]);
+
   const handlePickMedia = async (type: 'image' | 'video') => {
     try {
+      const isPost = postType === 'post';
+      // For Reels, we still enforce single video. For Posts, allow multiple.
+      const allowsMultiple = isPost && type === 'image'; 
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: type === 'video' ? ['videos'] : ['images'],
-        allowsEditing: true,
-        aspect: postType === 'reel' ? [9, 16] : [4, 3],
         quality: 0.8,
+        allowsEditing: false, 
+        allowsMultipleSelection: allowsMultiple, // Enable multi-select
+        selectionLimit: allowsMultiple ? 10 : 1,
       });
 
       if (!result.canceled) {
-        setMediaUri(result.assets[0].uri);
-        setMediaType(type);
+        if (allowsMultiple) {
+            // Process multiple assets
+            const newMedia = result.assets.map(asset => ({
+                uri: asset.uri,
+                type: type,
+                aspectRatio: (asset.width && asset.height) ? asset.width / asset.height : 1.0
+            }));
+            setSelectedMedia(newMedia);
+            setMediaUri(newMedia[0].uri); // Preview first item
+            setMediaType(type);
+             // Use first item's aspect ratio for main container preview
+            setAspectRatio(newMedia[0].aspectRatio);
+        } else {
+            // Single asset (legacy / video mode)
+            const asset = result.assets[0];
+            const ratio = (asset.width && asset.height) ? asset.width / asset.height : 1.0;
+            
+             // Validate constraints
+            const MAX_SIZE_MB = 100;
+            if (asset.fileSize && asset.fileSize > MAX_SIZE_MB * 1024 * 1024) {
+                 Alert.alert('File too large', `Video must be under ${MAX_SIZE_MB}MB`);
+                 return;
+            }
+
+            setMediaUri(asset.uri);
+            setMediaType(type);
+            setAspectRatio(ratio);
+            setSelectedMedia([{ uri: asset.uri, type, aspectRatio: ratio }]);
+        }
+
         setShowPollInput(false);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-        // Validate constraints
-        const asset = result.assets[0];
-        
-        // 1. Size Check (Max 100MB) - fileSize is in bytes
-        const MAX_SIZE_MB = 100;
-        if (asset.fileSize && asset.fileSize > MAX_SIZE_MB * 1024 * 1024) {
-             Alert.alert('File too large', `Video must be under ${MAX_SIZE_MB}MB`);
-             return;
-        }
-
-        // 2. Duration Check (Max 60s for Reels)
-        if (type === 'video' && asset.duration && asset.duration > 60000) {
-            Alert.alert('Video too long', 'Reels must be under 60 seconds');
-            return;
-        }
-
-        setMediaUri(asset.uri);
-        setMediaType(type);
-        setShowPollInput(false);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        
-        // Auto-switch to Reel if video
-        if (type === 'video') {
-            setPostType('reel');
-        }
       }
     } catch (error) {
       console.error('Failed to pick media:', error);
@@ -148,41 +160,70 @@ export default function CreatePostScreen() {
     setIsLoading(true);
     setUploadProgress(0);
     try {
-      // Upload media if present
-      let uploadedMediaUrl: string | undefined;
-      if (mediaUri) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          setUploadProgress(1); // Start progress
-          uploadedMediaUrl = await apiClient.uploadMediaWithProgress(
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      let uploadedMediaUrls: Array<{ url: string; type: 'image' | 'video'; aspectRatio: number }> = [];
+      let primaryMediaUrl: string | undefined;
+
+      // Handle Carousel / Multiple Media
+      if (selectedMedia.length > 0) {
+          const total = selectedMedia.length;
+          let completed = 0;
+
+          for (const item of selectedMedia) {
+              const uploadedUrl = await apiClient.uploadMediaWithProgress(
+                item.uri,
+                postType === 'reel' ? 'reels' : 'posts',
+                `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                (progress) => {
+                     // Approximate total progress
+                     setUploadProgress(Math.round(((completed + (progress / 100)) / total) * 90));
+                }
+              );
+              uploadedMediaUrls.push({
+                  url: uploadedUrl,
+                  type: item.type,
+                  aspectRatio: item.aspectRatio
+              });
+              completed++;
+          }
+          primaryMediaUrl = uploadedMediaUrls[0].url;
+      } 
+      // Legacy / Single Media Fallback (if selectedMedia wasn't populated properly but mediaUri was)
+      else if (mediaUri) {
+          setUploadProgress(10);
+          primaryMediaUrl = await apiClient.uploadMediaWithProgress(
             mediaUri,
             postType === 'reel' ? 'reels' : 'posts',
             `${user.id}/${Date.now()}`,
             (progress) => setUploadProgress(progress)
           );
-        }
       }
 
       // Determine final type
       let type: 'post' | 'reel' | 'poll' = postType;
       if (showPollInput) type = 'poll';
 
-      setUploadProgress(90);
+      setUploadProgress(95);
       await apiClient.createPost({
         type,
         content: content.trim(),
-        mediaUrl: uploadedMediaUrl,
+        mediaUrl: primaryMediaUrl, // Legacy support for primary image
+        mediaUrls: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : undefined, // V2 Carousel
         linkUrl: linkMetadata?.url,
         linkMetadata: linkMetadata,
         pollOptions: showPollInput ? pollOptions.filter(o => o.trim()) : undefined,
+        communityId: params.communityId,
+        aspectRatio: aspectRatio,
+        originalMetadata: { width: aspectRatio * 100, height: 100 },
       });
 
-      // Reward user with coins - bonus for reels
-      addCoins(type === 'reel' ? 25 : 10, `Created a ${type}`);
+      // V2: Points handled by backend. We just notify user.
+      addCoins(postType === 'reel' ? 5 : 2, 'Post Created', true);
 
       setUploadProgress(100);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Replace ensures we don't have navigation "ghosts" and fixes the GO_BACK error
       router.replace('/');
     } catch (error) {
       console.error('Failed to create post:', error);
@@ -284,14 +325,37 @@ export default function CreatePostScreen() {
         </View>
 
         {/* Media Preview */}
-        {mediaUri && (
-          <View style={styles.mediaPreview}>
+        {selectedMedia.length > 0 ? (
+           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carouselPreview} contentContainerStyle={{ paddingRight: 20 }}>
+               {selectedMedia.map((item, index) => (
+                   <View key={index} style={styles.carouselItem}>
+                       <Image source={{ uri: item.uri }} style={styles.carouselImage} />
+                       <TouchableOpacity 
+                            style={styles.removeMedia} 
+                            onPress={() => {
+                                const newMedia = selectedMedia.filter((_, i) => i !== index);
+                                setSelectedMedia(newMedia);
+                                if (newMedia.length === 0) {
+                                    setMediaUri(null);
+                                    setAspectRatio(1.0);
+                                } else {
+                                    setMediaUri(newMedia[0].uri);
+                                }
+                            }}
+                        >
+                            <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={24} color="#000" />
+                       </TouchableOpacity>
+                   </View>
+               ))}
+           </ScrollView>
+        ) : (mediaUri && (
+           <View style={styles.mediaPreview}>
             <Image source={{ uri: mediaUri }} style={styles.previewImage} />
-            <TouchableOpacity style={styles.removeMedia} onPress={() => setMediaUri(null)}>
+            <TouchableOpacity style={styles.removeMedia} onPress={() => { setMediaUri(null); setMediaType('image'); }}>
               <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={24} color="#000" />
             </TouchableOpacity>
           </View>
-        )}
+        ))}
 
         {/* Link Preview */}
         {linkMetadata && (
@@ -564,5 +628,22 @@ const styles = StyleSheet.create({
   fetchingText: {
     ...typography.caption,
     color: colors.textSecondary,
+  },
+  carouselPreview: {
+    paddingLeft: spacing.md,
+    marginBottom: spacing.md,
+  },
+  carouselItem: {
+      width: 200,
+      height: 250,
+      marginRight: spacing.sm,
+      borderRadius: borderRadius.md,
+      overflow: 'hidden',
+      position: 'relative',
+  },
+  carouselImage: {
+      width: '100%',
+      height: '100%',
+      resizeMode: 'cover',
   },
 });

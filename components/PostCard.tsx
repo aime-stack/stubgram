@@ -8,9 +8,14 @@ import {
   Image,
   Dimensions,
   Share,
+  FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from 'react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import * as WebBrowser from 'expo-web-browser';
 import { Post } from '@/types';
 import { spacing, borderRadius, typography, colors, useThemedStyles } from '@/styles/commonStyles';
 import { useThemeStore, darkColors, lightColors } from '@/stores/themeStore';
@@ -52,7 +57,7 @@ const renderContentWithHashtags = (content: string, router: any, themeColors: an
   });
 };
 
-export function PostCard({ post, onLike, onComment, onShare }: PostCardProps) {
+const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) => {
   const router = useRouter();
   const { user } = useAuthStore();
   const { addCoins } = useWalletStore();
@@ -68,12 +73,39 @@ export function PostCard({ post, onLike, onComment, onShare }: PostCardProps) {
   // Check if current user is viewing their own post
   const isOwnPost = user?.id === post.userId;
 
-  // Check follow status on mount
+  const [aspectRatio, setAspectRatio] = useState(post.aspectRatio || 1.0);
+  const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
+
   useEffect(() => {
-    if (!isOwnPost && post.userId) {
-      apiClient.isFollowing(post.userId).then(setIsFollowing).catch(() => { });
+    // If we have a valid aspect ratio from DB (and it's not just the default 1.0 for legacy posts which might actually be different), use it.
+    // However, since we defaulted to 1.0 in migration, we might want to still check Image.getSize for older posts if we suspect it's wrong.
+    // But for V2, create-post sends exact ratio.
+    if (post.aspectRatio && post.aspectRatio !== 1.0) {
+        setAspectRatio(post.aspectRatio);
+        return;
     }
-  }, [post.userId, isOwnPost]);
+
+    if (post.mediaUrl && (post.type === 'image' || post.type === 'post')) {
+      Image.getSize(post.mediaUrl, (w, h) => {
+        if (w > 0 && h > 0) {
+          setAspectRatio(w / h);
+        }
+      }, (error) => {
+          // console.log('Error getting image size:', error);
+      });
+    } else if (post.type === 'video' || post.type === 'reel') {
+        // Default video aspect ratio (can be improved if video metadata is available)
+        setAspectRatio(9/16); 
+    }
+  }, [post.mediaUrl, post.type, post.aspectRatio]);
+
+  // Video Player Setup
+  const isVideo = post.type === 'video' || (post.mediaUrl && (post.mediaUrl.endsWith('.mp4') || post.mediaUrl.endsWith('.mov')));
+  
+  const player = useVideoPlayer((isVideo && post.mediaUrl) ? post.mediaUrl : null, (player) => {
+    player.loop = true;
+    player.muted = true;
+  });
 
   const handleFollow = async () => {
     if (followLoading || isOwnPost) return;
@@ -167,6 +199,13 @@ export function PostCard({ post, onLike, onComment, onShare }: PostCardProps) {
     } catch (error) {
       console.error('Failed to save post:', error);
       setIsSaved(!isSaved); // Revert on error
+    }
+  };
+
+  const handleLinkPress = async () => {
+    if (post.linkPreview?.url) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        await WebBrowser.openBrowserAsync(post.linkPreview.url);
     }
   };
 
@@ -275,8 +314,114 @@ export function PostCard({ post, onLike, onComment, onShare }: PostCardProps) {
               </Text>
             )}
 
-            {post.mediaUrl && (post.type === 'image' || post.type === 'video' || post.type === 'reel' || post.type === 'post') && (
-              <Image source={{ uri: post.mediaUrl }} style={themedStyles.media} resizeMode="cover" />
+            {/* Carousel Render Logic */}
+            {post.mediaUrls && post.mediaUrls.length > 0 ? (
+                <View>
+                    <FlatList
+                        data={post.mediaUrls}
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        bounces={false}
+                        keyExtractor={(_, index) => index.toString()}
+                        onMomentumScrollEnd={(e) => {
+                            const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+                            setCurrentCarouselIndex(newIndex);
+                        }}
+                        renderItem={({ item }) => {
+                            if (item.type === 'video') {
+                                // Simple video render for carousel - optimized for muted feed view
+                                // Note: In a real app we'd need more complex visibility logic to play only the visible one
+                                return (
+                                    <View style={{ width: width, aspectRatio: item.aspectRatio || (9/16), backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+                                        <IconSymbol ios_icon_name="play.fill" android_material_icon_name="play-arrow" size={50} color="#FFF" />
+                                        {/* Placeholder for video - for now just an icon due to complexity of multi-video lists */}
+                                    </View>
+                                )
+                            } 
+                            return (
+                                <View style={{ width: width, alignItems: 'center' }}>
+                                     <Image 
+                                        source={{ uri: item.url }} 
+                                        style={[themedStyles.media, { width: width - (spacing.md * 2), aspectRatio: item.aspectRatio || 1.0 }]} 
+                                        resizeMode="cover" 
+                                     />
+                                </View>
+                            )
+                        }}
+                    />
+                    {/* Pagination Dots */}
+                    {post.mediaUrls.length > 1 && (
+                        <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8 }}>
+                            {post.mediaUrls.map((_, index) => (
+                                <View 
+                                    key={index}
+                                    style={{
+                                        width: 6, 
+                                        height: 6, 
+                                        borderRadius: 3, 
+                                        backgroundColor: index === currentCarouselIndex ? colors.primary : themeColors.border,
+                                        marginHorizontal: 3
+                                    }} 
+                                />
+                            ))}
+                        </View>
+                    )}
+                </View>
+            ) : (
+             /* Single Media Render Logic (Legacy) */
+             post.mediaUrl && (
+              isVideo ? (
+                <View style={[themedStyles.media, { aspectRatio, backgroundColor: '#000' }]}>
+                  <VideoView
+                    player={player}
+                    style={{ flex: 1 }}
+                    contentFit="cover"
+                    nativeControls={false}
+                    allowsFullscreen
+                    allowsPictureInPicture
+                  />
+                  {/* Play/Pause overlay could go here, but for feed we often strictly use controls or auto-play. 
+                      For now, simple implementation since iOS/Android behavior varies. 
+                      Adding a simple play control could be nice if auto-play isn't perfect. */}
+                  <TouchableOpacity 
+                    style={StyleSheet.absoluteFill} 
+                    onPress={() => {
+                        if (player.playing) {
+                            player.pause();
+                        } else {
+                            player.play();
+                            player.muted = false; // Unmute on explicit play
+                        }
+                    }}
+                  />
+                  {!player.playing && (
+                      <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', pointerEvents: 'none' }]}>
+                          <View style={{ backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 30, padding: 10 }}>
+                              <IconSymbol ios_icon_name="play.fill" android_material_icon_name="play-arrow" size={30} color="#FFF" />
+                          </View>
+                      </View>
+                  )}
+                </View>
+              ) : (
+                (post.type === 'image' || post.type === 'post') && (
+                  <Image source={{ uri: post.mediaUrl }} style={[themedStyles.media, { aspectRatio }]} resizeMode="cover" />
+                )
+              )
+            )
+            )}
+
+            {post.linkPreview && (
+                <TouchableOpacity onPress={handleLinkPress} activeOpacity={0.9} style={themedStyles.linkPreviewContainer}>
+                    {post.linkPreview.image && (
+                        <Image source={{ uri: post.linkPreview.image }} style={themedStyles.linkImage} />
+                    )}
+                    <View style={themedStyles.linkInfo}>
+                        <Text style={themedStyles.linkTitle} numberOfLines={1}>{post.linkPreview.title}</Text>
+                        <Text style={themedStyles.linkDescription} numberOfLines={2}>{post.linkPreview.description}</Text>
+                        <Text style={themedStyles.linkDomain}>{post.linkPreview.domain}</Text>
+                    </View>
+                </TouchableOpacity>
             )}
           </>
         )}
@@ -329,6 +474,8 @@ export function PostCard({ post, onLike, onComment, onShare }: PostCardProps) {
     </View>
   );
 }
+
+export const PostCard = React.memo(PostCardComponent);
 
 const createStyles = (themeColors: typeof darkColors) => StyleSheet.create({
   container: {
@@ -414,9 +561,12 @@ const createStyles = (themeColors: typeof darkColors) => StyleSheet.create({
     fontWeight: '600',
   },
   media: {
-    width: '100%',
-    aspectRatio: 1,
+    width: undefined, // Let it fill the container minus margins
+    marginHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
     backgroundColor: themeColors.border,
+    overflow: 'hidden',
+    // aspectRatio is now handled dynamically in the component
   },
   actionsRow: {
     flexDirection: 'row',
@@ -498,6 +648,40 @@ const createStyles = (themeColors: typeof darkColors) => StyleSheet.create({
     aspectRatio: 16 / 9,
     borderRadius: borderRadius.sm,
     backgroundColor: themeColors.border,
+  },
+
+  linkPreviewContainer: {
+    marginHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: themeColors.border,
+    overflow: 'hidden',
+    marginTop: spacing.sm,
+    backgroundColor: themeColors.background,
+  },
+  linkImage: {
+    width: '100%',
+    height: 150,
+    backgroundColor: themeColors.border,
+  },
+  linkInfo: {
+    padding: spacing.sm,
+  },
+  linkTitle: {
+    fontWeight: '700',
+    color: themeColors.text,
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  linkDescription: {
+    color: themeColors.textSecondary,
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  linkDomain: {
+    color: colors.primary,
+    fontSize: 12,
+    textTransform: 'lowercase',
   },
 });
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Switch } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -55,9 +56,14 @@ export function DrawerContent(props: any) {
                     </View>
 
                     {/* Wallet Balance */}
-                    <View style={[styles.walletBadge, { backgroundColor: colors.card }]}>
-                        <Text style={[styles.walletText, { color: colors.primary }]}>{balance.toLocaleString()} 🪙</Text>
-                    </View>
+                    <LinearGradient
+                        colors={['#667eea', '#764ba2']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[styles.walletBadge]}
+                    >
+                        <Text style={[styles.walletText, { color: '#FFF' }]}>{balance.toLocaleString()} 🪙</Text>
+                    </LinearGradient>
                 </View>
 
                 <View style={[styles.separator, { backgroundColor: colors.border }]} />
@@ -92,12 +98,21 @@ export function DrawerContent(props: any) {
                     />
 
                     <DrawerItem
-                        label="Video Spaces"
+                        label="Meetings"
                         labelStyle={[styles.drawerLabel, { color: colors.text }]}
                         icon={({ color, size }) => (
                             <IconSymbol ios_icon_name="video.fill" android_material_icon_name="videocam" size={24} color="#4CAF50" />
                         )}
-                        onPress={() => handleNavigation('/spaces')}
+                        onPress={() => handleNavigation('/meetings/join')}
+                    />
+
+                    <DrawerItem
+                        label="Communities"
+                        labelStyle={[styles.drawerLabel, { color: colors.text }]}
+                        icon={({ color, size }) => (
+                            <IconSymbol ios_icon_name="person.3.fill" android_material_icon_name="groups" size={24} color="#2196F3" />
+                        )}
+                        onPress={() => handleNavigation('/communities')}
                     />
 
                     <DrawerItem

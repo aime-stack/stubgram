@@ -58,11 +58,18 @@ Deno.serve(async (req: Request) => {
         console.log(`[generate-token] Token request for user ${user.id} in meeting ${targetId}`);
 
         // 1. Fetch meeting info
-        const { data: meeting, error: meetingError } = await supabaseClient
-            .from('meetings')
-            .select('*')
-            .eq('id', targetId)
-            .maybeSingle()
+        // Check if targetId is a UUID
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+        
+        let meetingQuery = supabaseClient.from('meetings').select('*');
+        if (isUuid) {
+            meetingQuery = meetingQuery.eq('id', targetId);
+        } else {
+            // Use meeting_link instead of meeting_id to match actual schema
+            meetingQuery = meetingQuery.eq('meeting_link', targetId);
+        }
+        
+        const { data: meeting, error: meetingError } = await meetingQuery.maybeSingle();
 
         if (meetingError) {
             console.error('[generate-token] Database error fetching meeting:', meetingError);
@@ -93,12 +100,19 @@ Deno.serve(async (req: Request) => {
 
         // 2. Check or Create participation
         const participantTable = isLegacySpace ? 'video_space_participants' : 'meeting_participants';
+        
+        // If it's a legacy space, it uses 'space_id' (UUID).
+        // If it's a meeting, it uses 'meeting_id' (UUID) which references meetings(id).
+        // BUT we might have resolved the meeting via its FRIENDLY 'meeting_id' (text).
+        // So we need the UUID of the resolved meeting to check participation.
+        
+        const resolvedId = finalMeeting.id; // Always use the UUID from the fetched meeting row
         const idCol = isLegacySpace ? 'space_id' : 'meeting_id';
 
         let { data: participation, error: partError } = await supabaseClient
             .from(participantTable)
             .select('role')
-            .eq(idCol, targetId)
+            .eq(idCol, resolvedId) // Use the resolved UUID, not the potentially text input
             .eq('user_id', user.id)
             .is('left_at', null)
             .maybeSingle()
@@ -114,13 +128,25 @@ Deno.serve(async (req: Request) => {
             const isPublic = isLegacySpace ? finalMeeting.type === 'public' : !finalMeeting.is_private;
 
             if (isPublic || isHost) {
-                console.log(`[generate-token] Auto-joining user ${user.id} to ${targetId}`);
+                console.log(`[generate-token] Auto-joining user ${user.id} to ${targetId} (Legacy: ${isLegacySpace})`);
+                
+                // DETERMINE CORRECT ROLE BASED ON TABLE TYPE
+                let role = 'participant'; // Default for new Meetings
+                if (isLegacySpace) {
+                    // Legacy video_spaces table uses 'host', 'speaker', 'listener'
+                    // For now, auto-joiners are 'speaker' if public, or 'host'
+                   role = isHost ? 'host' : 'speaker'; 
+                } else {
+                   // New meetings table uses 'host', 'participant'
+                   role = isHost ? 'host' : 'participant';
+                }
+
                 const { data: newPart, error: joinError } = await supabaseClient
                     .from(participantTable)
                     .insert({
-                        [idCol]: targetId,
+                        [idCol]: resolvedId, // Use resolved UUID
                         user_id: user.id,
-                        role: isHost ? 'host' : 'participant'
+                        role: role
                     })
                     .select('role')
                     .single()
@@ -144,7 +170,7 @@ Deno.serve(async (req: Request) => {
             .single()
 
         const username = profile?.username ?? 'Anonymous'
-        const role = participation?.role ?? 'participant'
+        const _role = participation?.role ?? 'participant'
 
         // 4. Generate LiveKit Token
         const apiKey = Deno.env.get('LIVEKIT_API_KEY')
@@ -156,6 +182,8 @@ Deno.serve(async (req: Request) => {
             throw new Error('LiveKit configuration is missing on server.')
         }
 
+        console.log(`[generate-token] Using API Key: ${apiKey.substring(0, 4)}***`);
+
         const at = new AccessToken(apiKey, apiSecret, {
             identity: user.id,
             name: username,
@@ -164,9 +192,7 @@ Deno.serve(async (req: Request) => {
         at.addGrant({
             roomJoin: true,
             room: targetId,
-            canPublish: role !== 'viewer' && role !== 'participant', // In Meetings, maybe only host/co-host can publish by default? 
-            // Client requested: "Meetings must support: Video on/off, Microphone mute/unmute"
-            // So everyone should be able to publish.
+            // Everyone should be able to publish (speak/video) in this version
             canPublish: true, 
             canSubscribe: true,
             canPublishData: true, 

@@ -18,6 +18,7 @@ import { useThemeStore, darkColors, lightColors } from '@/stores/themeStore';
 import { PostCard } from '@/components/PostCard';
 import { AdCard } from '@/components/AdCard';
 import { StoriesBar } from '@/components/StoriesBar';
+import { HomeComposer } from '@/components/HomeComposer';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Post, Story } from '@/types';
 import { apiClient } from '@/services/api';
@@ -161,7 +162,10 @@ export default function HomeScreen() {
   }, []);
 
   const renderHeader = useCallback(() => (
-    <StoriesBar stories={stories} onCreateStory={handleCreateStory} />
+    <View>
+      <StoriesBar stories={stories} onCreateStory={handleCreateStory} />
+      <HomeComposer />
+    </View>
   ), [stories, handleCreateStory]);
 
   const renderEmpty = useCallback(() => (
@@ -253,6 +257,10 @@ export default function HomeScreen() {
         }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
+        initialNumToRender={5}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        removeClippedSubviews={true}
         ListEmptyComponent={renderEmpty}
         ListFooterComponent={renderFooter}
       />

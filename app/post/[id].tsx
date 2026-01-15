@@ -87,6 +87,9 @@ export default function PostDetailScreen() {
 
       // Reward user
       addCoins(5, 'Commented on a post');
+      
+      // Update local comment count
+      setPost(prev => prev ? { ...prev, commentsCount: (prev.commentsCount || 0) + 1 } : null);
 
       setCommentText('');
       setReplyToId(null);

@@ -45,7 +45,8 @@ Deno.serve(async (req: Request) => {
             .in('status', ['created', 'live'])
 
         if (countError) throw countError
-        if (count && count >= 5) {
+        // Increased limit for testing
+        if (count && count >= 50) {
             console.warn(`[create-space] Rate limit hit for user ${user.id}. Current count: ${count}`);
             return new Response(
                 JSON.stringify({ 

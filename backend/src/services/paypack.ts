@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 
 export class PaypackService {
-    private static API_URL = 'https://paypack.rw/api';
+    private static API_URL = 'https://payments.paypack.rw/api';
     private static clientId = process.env.PAYPACK_CLIENT_ID || '';
     private static clientSecret = process.env.PAYPACK_CLIENT_SECRET || '';
     private static webhookSecret = process.env.PAYPACK_WEBHOOK_SECRET || process.env.PAYPACK_CLIENT_SECRET || '';
