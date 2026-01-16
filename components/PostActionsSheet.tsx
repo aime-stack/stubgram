@@ -33,8 +33,6 @@ export const PostActionsSheet: React.FC<PostActionsSheetProps> = ({
   const { isDark } = useThemeStore();
   const themeColors = isDark ? darkColors : lightColors;
 
-  console.log('PostActionsSheet rendering, visible:', visible, 'isOwnPost:', isOwnPost);
-
   const actions = isOwnPost
     ? [
         { icon: 'pencil', materialIcon: 'edit', label: 'Edit Post', onPress: onEdit, color: themeColors.text },
@@ -45,8 +43,6 @@ export const PostActionsSheet: React.FC<PostActionsSheetProps> = ({
         { icon: 'megaphone', materialIcon: 'campaign', label: 'Boost Post', onPress: onBoost, color: colors.primary },
         { icon: 'exclamationmark.triangle', materialIcon: 'report', label: 'Report Post', onPress: onReport, color: '#FF3B30' },
       ];
-
-  console.log('PostActionsSheet actions:', actions.length);
 
   return (
     <Modal
