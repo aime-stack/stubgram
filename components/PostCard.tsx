@@ -352,7 +352,13 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity style={themedStyles.moreButton} onPress={() => setShowActionsSheet(true)}>
+        <TouchableOpacity 
+          style={themedStyles.moreButton} 
+          onPress={() => {
+            console.log('3-dot button pressed, showing actions sheet');
+            setShowActionsSheet(true);
+          }}
+        >
           <IconSymbol ios_icon_name="ellipsis" android_material_icon_name="more-horiz" size={20} color={themeColors.textSecondary} />
         </TouchableOpacity>
       </View>

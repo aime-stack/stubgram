@@ -5,14 +5,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
-  Animated,
-  Dimensions,
+  Pressable,
 } from 'react-native';
 import { IconSymbol } from './IconSymbol';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
 import { useThemeStore, darkColors, lightColors } from '@/stores/themeStore';
-
-const { height } = Dimensions.get('window');
 
 interface PostActionsSheetProps {
   visible: boolean;
@@ -36,6 +33,8 @@ export const PostActionsSheet: React.FC<PostActionsSheetProps> = ({
   const { isDark } = useThemeStore();
   const themeColors = isDark ? darkColors : lightColors;
 
+  console.log('PostActionsSheet rendering, visible:', visible, 'isOwnPost:', isOwnPost);
+
   const actions = isOwnPost
     ? [
         { icon: 'pencil', materialIcon: 'edit', label: 'Edit Post', onPress: onEdit, color: themeColors.text },
@@ -47,6 +46,8 @@ export const PostActionsSheet: React.FC<PostActionsSheetProps> = ({
         { icon: 'exclamationmark.triangle', materialIcon: 'report', label: 'Report Post', onPress: onReport, color: '#FF3B30' },
       ];
 
+  console.log('PostActionsSheet actions:', actions.length);
+
   return (
     <Modal
       visible={visible}
@@ -54,15 +55,11 @@ export const PostActionsSheet: React.FC<PostActionsSheetProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <TouchableOpacity 
+      <Pressable 
         style={styles.overlay} 
-        activeOpacity={1} 
         onPress={onClose}
       >
-        <TouchableOpacity 
-          activeOpacity={1}
-          onPress={(e) => e.stopPropagation()}
-        >
+        <Pressable onPress={(e) => {}}>
           <View style={[styles.sheet, { backgroundColor: themeColors.card }]}>
             <View style={[styles.handle, { backgroundColor: themeColors.border }]} />
             
@@ -79,8 +76,8 @@ export const PostActionsSheet: React.FC<PostActionsSheetProps> = ({
                 }}
               >
                 <IconSymbol
-                  ios_icon_name={action.icon}
-                  android_material_icon_name={action.materialIcon}
+                  ios_icon_name={action.icon as any}
+                  android_material_icon_name={action.materialIcon as any}
                   size={22}
                   color={action.color}
                 />
@@ -97,8 +94,8 @@ export const PostActionsSheet: React.FC<PostActionsSheetProps> = ({
               <Text style={[styles.cancelText, { color: themeColors.text }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </TouchableOpacity>
-      </TouchableOpacity>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 };
