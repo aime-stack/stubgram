@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "esbuild src/index.ts --bundle --outdir=dist --platform=node --target=node20 --format=esm --packages=external --sourcemap",

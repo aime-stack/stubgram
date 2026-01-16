@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: snapgram-backend
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: PAYPACK_CLIENT_ID
+        sync: false
+      - key: PAYPACK_CLIENT_SECRET
+        sync: false
+      - key: PORT
+        value: 10000
