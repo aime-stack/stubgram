@@ -356,6 +356,110 @@ class ApiClient {
     return { success: true };
   }
 
+  async updatePost(postId: string, updates: { content?: string }) {
+    const user = await this.requireAuth();
+
+    const { data: post, error } = await supabase
+      .from('posts')
+      .update({
+        content: updates.content,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', postId)
+      .eq('user_id', user.id) // Ensure user owns the post
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    if (!post) throw new Error('Post not found or unauthorized');
+
+    const profile = await this.getProfileById(user.id);
+    return { data: this.mapPost(post, profile) };
+  }
+
+  async reportPost(postId: string, reason: string, details?: string) {
+    const user = await this.requireAuth();
+
+    const { error } = await supabase
+      .from('reports')
+      .insert({
+        reporter_id: user.id,
+        post_id: postId,
+        reason,
+        details,
+        status: 'pending',
+      });
+
+    if (error) throw error;
+    return { success: true };
+  }
+
+  async boostPost(
+    postId: string,
+    durationDays: number,
+    paymentMethod: 'coins' | 'rwf',
+    amount: number
+  ) {
+    const user = await this.requireAuth();
+
+    // Verify user owns the post
+    const { data: post } = await supabase
+      .from('posts')
+      .select('user_id')
+      .eq('id', postId)
+      .single();
+
+    if (!post || post.user_id !== user.id) {
+      throw new Error('Post not found or unauthorized');
+    }
+
+    if (paymentMethod === 'coins') {
+      // Deduct coins from wallet
+      const { data: wallet } = await supabase
+        .from('wallets')
+        .select('coins_balance')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!wallet || wallet.coins_balance < amount) {
+        throw new Error('Insufficient coins balance');
+      }
+
+      // Update wallet
+      await supabase
+        .from('wallets')
+        .update({ coins_balance: wallet.coins_balance - amount })
+        .eq('user_id', user.id);
+    }
+    // For 'rwf', payment integration would go here (Paypack, etc.)
+
+    // Set boost expiration
+    const boostExpiresAt = new Date();
+    boostExpiresAt.setDate(boostExpiresAt.getDate() + durationDays);
+
+    // Update post to mark as boosted
+    const { error } = await supabase
+      .from('posts')
+      .update({
+        is_boosted: true,
+        boost_expires_at: boostExpiresAt.toISOString(),
+      })
+      .eq('id', postId);
+
+    if (error) throw error;
+
+    // Record transaction
+    await supabase.from('transactions').insert({
+      user_id: user.id,
+      type: 'boost_post',
+      amount: -amount,
+      description: `Boosted post for ${durationDays} days`,
+      reference_id: postId,
+    });
+
+    return { success: true, expiresAt: boostExpiresAt.toISOString() };
+  }
+
   async likePost(postId: string) {
     const user = await this.requireAuth();
 

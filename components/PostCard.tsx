@@ -11,6 +11,9 @@ import {
   FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Alert,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useRouter } from 'expo-router';
@@ -23,6 +26,8 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { apiClient } from '@/services/api';
 import { useWalletStore } from '@/stores/walletStore';
 import { useAuthStore } from '@/stores/authStore';
+import { PostActionsSheet } from '@/components/PostActionsSheet';
+import { ReportModal } from '@/components/ReportModal';
 
 const { width } = Dimensions.get('window');
 
@@ -211,6 +216,84 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
     }
   };
 
+  // Post Actions Menu State
+  const [showActionsSheet, setShowActionsSheet] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editContent, setEditContent] = useState(post.content || '');
+
+  const handleEdit = () => {
+    setEditContent(post.content || '');
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      await apiClient.updatePost(post.id, { content: editContent });
+      Alert.alert('Success', 'Post updated successfully');
+      setShowEditModal(false);
+      // Optionally refresh the post or update in place
+    } catch (error) {
+      console.error('Failed to update post:', error);
+      Alert.alert('Error', 'Failed to update post');
+    }
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiClient.deletePost(post.id);
+              Alert.alert('Success', 'Post deleted successfully');
+              // Trigger a refresh or remove from UI
+            } catch (error) {
+              console.error('Failed to delete post:', error);
+              Alert.alert('Error', 'Failed to delete post');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReport = async (reason: string, details: string) => {
+    try {
+      await apiClient.reportPost(post.id, reason, details);
+    } catch (error) {
+      console.error('Failed to report post:', error);
+      throw error;
+    }
+  };
+
+  const handleBoost = () => {
+    // TODO: Open boost modal with payment options (coins/RWF)
+    Alert.alert(
+      'Boost Post',
+      'Choose your boost duration and payment method',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: '7 days (100 coins)', onPress: () => handleBoostPayment(7, 'coins', 100) },
+        { text: '7 days (1000 RWF)', onPress: () => handleBoostPayment(7, 'rwf', 1000) },
+      ]
+    );
+  };
+
+  const handleBoostPayment = async (days: number, method: 'coins' | 'rwf', amount: number) => {
+    try {
+      await apiClient.boostPost(post.id, days, method, amount);
+      Alert.alert('Success', `Post boosted for ${days} days!`);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to boost post');
+    }
+  };
+
   const formatTime = (date: string) => {
     const now = new Date();
     const postDate = new Date(date);
@@ -269,7 +352,7 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity style={themedStyles.moreButton}>
+        <TouchableOpacity style={themedStyles.moreButton} onPress={() => setShowActionsSheet(true)}>
           <IconSymbol ios_icon_name="ellipsis" android_material_icon_name="more-horiz" size={20} color={themeColors.textSecondary} />
         </TouchableOpacity>
       </View>
@@ -473,6 +556,75 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Post Actions Sheet */}
+      <PostActionsSheet
+        visible={showActionsSheet}
+        onClose={() => setShowActionsSheet(false)}
+        isOwnPost={isOwnPost}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onReport={() => setShowReportModal(true)}
+        onBoost={handleBoost}
+      />
+
+      {/* Report Modal */}
+      <ReportModal
+        visible={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        onSubmit={handleReport}
+      />
+
+      {/* Edit Modal */}
+      <Modal
+        visible={showEditModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.md }}>
+          <View style={[{ backgroundColor: themeColors.card, borderRadius: borderRadius.xl, padding: spacing.md }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+              <Text style={[typography.h2, { color: themeColors.text, fontSize: 20, fontWeight: '700' }]}>Edit Post</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <IconSymbol ios_icon_name="xmark" android_material_icon_name="close" size={24} color={themeColors.text} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[
+                typography.body,
+                {
+                  backgroundColor: themeColors.background,
+                  color: themeColors.text,
+                  borderColor: themeColors.border,
+                  borderWidth: 1,
+                  borderRadius: borderRadius.md,
+                  padding: spacing.md,
+                  minHeight: 150,
+                  textAlignVertical: 'top',
+                },
+              ]}
+              placeholder="What's on your mind?"
+              placeholderTextColor={themeColors.textSecondary}
+              multiline
+              value={editContent}
+              onChangeText={setEditContent}
+            />
+            <TouchableOpacity
+              style={{
+                backgroundColor: colors.primary,
+                padding: spacing.md,
+                borderRadius: borderRadius.md,
+                alignItems: 'center',
+                marginTop: spacing.md,
+              }}
+              onPress={handleSaveEdit}
+            >
+              <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 16 }}>Save Changes</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
