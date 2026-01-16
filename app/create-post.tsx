@@ -65,7 +65,13 @@ export default function CreatePostScreen() {
             setIsFetchingMetadata(true);
             try {
                 const metadata = await apiClient.fetchLinkMetadata(urls[0]);
-                setLinkMetadata(metadata);
+                // Only set metadata if extraction was successful or partial
+                if (metadata && metadata.status !== 'failed') {
+                    setLinkMetadata(metadata);
+                } else {
+                    console.log('Link metadata extraction failed:', metadata?.error);
+                    // Don't set metadata - show nothing instead of broken preview
+                }
             } catch (error) {
                 console.error('Failed to fetch link metadata:', error);
             } finally {
@@ -75,6 +81,7 @@ export default function CreatePostScreen() {
         fetchMetadata();
     }
   }, [content, linkMetadata, isFetchingMetadata, mediaUri]);
+
 
   const [aspectRatio, setAspectRatio] = useState(1.0);
 

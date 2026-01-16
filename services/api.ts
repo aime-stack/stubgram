@@ -275,18 +275,64 @@ class ApiClient {
   };
 }
 
-  async fetchLinkMetadata(url: string) {
-    const { data: { session } } = await supabase.auth.getSession();
-    const { data, error } = await supabase.functions.invoke('fetch-link-metadata', {
-      body: { url },
-      headers: {
-        Authorization: `Bearer ${session?.access_token}`
-      }
-    });
+  async fetchLinkMetadata(url: string): Promise<{
+    url: string;
+    title: string | null;
+    description: string | null;
+    image: string | null;
+    favicon: string | null;
+    siteName: string | null;
+    content: string | null;
+    canonicalUrl: string | null;
+    status: 'success' | 'partial' | 'failed';
+    error: string | null;
+  }> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second client-side timeout
 
-    if (error) throw error;
-    return data;
+    try {
+      const response = await fetch(`${this.backendUrl}/link-metadata`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      
+      // Return graceful degradation instead of throwing
+      let siteName: string | null = null;
+      try {
+        siteName = new URL(url).hostname;
+      } catch {
+        // Invalid URL
+      }
+      
+      return {
+        url,
+        title: null,
+        description: null,
+        image: null,
+        favicon: null,
+        siteName,
+        content: null,
+        canonicalUrl: null,
+        status: 'failed',
+        error: error.name === 'AbortError' ? 'Request timeout' : (error.message || 'Unknown error'),
+      };
+    }
   }
+
 
   async getPost(postId: string) {
     const { data: post, error } = await supabase
