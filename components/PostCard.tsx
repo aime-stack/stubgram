@@ -105,6 +105,8 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
   const player = useVideoPlayer((isVideo && post.mediaUrl) ? post.mediaUrl : null, (player) => {
     player.loop = true;
     player.muted = true;
+    // Autoplay when video loads
+    player.play();
   });
 
   const handleFollow = async () => {
