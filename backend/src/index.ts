@@ -9,6 +9,7 @@ import { authMiddleware } from './lib/auth.js';
 import { PaypackService } from './services/paypack.js';
 import { TranscodeService } from './services/transcode.js';
 import { AuditService } from './services/audit.js';
+import { extractLinkMetadata, getCacheStats } from './services/linkMetadata.js';
 
 // Database connection
 const connectionString = process.env.DATABASE_URL || '';
@@ -99,6 +100,90 @@ app.post('/reels/:id/view', async (request: any) => {
         .where(sql`${schema.posts.id} = ${id} AND ${schema.posts.type} = 'reel'`);
 
     return { success: true };
+});
+
+// --- Link Metadata Endpoints ---
+
+// Rate limiting map for link metadata requests
+const linkMetadataRateLimit: Map<string, { count: number; resetAt: number }> = new Map();
+const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 30; // 30 requests per minute per IP
+
+// Extract link metadata
+app.post('/link-metadata', async (request: any, reply: any) => {
+    // Rate limiting
+    const ip = request.ip || 'unknown';
+    const now = Date.now();
+    const limit = linkMetadataRateLimit.get(ip);
+    
+    if (!limit || limit.resetAt < now) {
+        linkMetadataRateLimit.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    } else {
+        limit.count++;
+        if (limit.count > RATE_LIMIT_MAX_REQUESTS) {
+            return reply.status(429).send({
+                url: null,
+                title: null,
+                description: null,
+                image: null,
+                favicon: null,
+                siteName: null,
+                content: null,
+                canonicalUrl: null,
+                status: 'failed',
+                error: 'Rate limit exceeded. Try again later.',
+            });
+        }
+    }
+    
+    const { url } = request.body as { url?: string };
+    
+    if (!url || typeof url !== 'string') {
+        return reply.status(400).send({
+            url: null,
+            title: null,
+            description: null,
+            image: null,
+            favicon: null,
+            siteName: null,
+            content: null,
+            canonicalUrl: null,
+            status: 'failed',
+            error: 'URL is required',
+        });
+    }
+    
+    try {
+        const metadata = await extractLinkMetadata(url);
+        return metadata;
+    } catch (error: any) {
+        app.log.error({ error, url }, 'Link metadata extraction failed');
+        
+        let siteName: string | null = null;
+        try {
+            siteName = new URL(url).hostname;
+        } catch {
+            // Invalid URL
+        }
+        
+        return {
+            url,
+            title: null,
+            description: null,
+            image: null,
+            favicon: null,
+            siteName,
+            content: null,
+            canonicalUrl: null,
+            status: 'failed',
+            error: error.message || 'Unknown error',
+        };
+    }
+});
+
+// Get link metadata cache stats (for debugging/monitoring)
+app.get('/link-metadata/stats', async () => {
+    return getCacheStats();
 });
 
 // --- Wallet Endpoints ---
