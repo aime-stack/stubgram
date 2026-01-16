@@ -51,7 +51,7 @@ export const PostActionsSheet: React.FC<PostActionsSheetProps> = ({
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="slide"
       onRequestClose={onClose}
     >
       <TouchableOpacity 
@@ -59,40 +59,45 @@ export const PostActionsSheet: React.FC<PostActionsSheetProps> = ({
         activeOpacity={1} 
         onPress={onClose}
       >
-        <View style={[styles.sheet, { backgroundColor: themeColors.card }]}>
-          <View style={[styles.handle, { backgroundColor: themeColors.border }]} />
-          
-          {actions.map((action, index) => (
+        <TouchableOpacity 
+          activeOpacity={1}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <View style={[styles.sheet, { backgroundColor: themeColors.card }]}>
+            <View style={[styles.handle, { backgroundColor: themeColors.border }]} />
+            
+            {actions.map((action, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.actionItem,
+                  index !== actions.length - 1 && { borderBottomWidth: 1, borderBottomColor: themeColors.border }
+                ]}
+                onPress={() => {
+                  action.onPress?.();
+                  onClose();
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name={action.icon}
+                  android_material_icon_name={action.materialIcon}
+                  size={22}
+                  color={action.color}
+                />
+                <Text style={[styles.actionLabel, { color: action.color }]}>
+                  {action.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            
             <TouchableOpacity
-              key={index}
-              style={[
-                styles.actionItem,
-                index !== actions.length - 1 && { borderBottomWidth: 1, borderBottomColor: themeColors.border }
-              ]}
-              onPress={() => {
-                action.onPress?.();
-                onClose();
-              }}
+              style={[styles.cancelButton, { marginTop: spacing.sm }]}
+              onPress={onClose}
             >
-              <IconSymbol
-                ios_icon_name={action.icon}
-                android_material_icon_name={action.materialIcon}
-                size={22}
-                color={action.color}
-              />
-              <Text style={[styles.actionLabel, { color: action.color }]}>
-                {action.label}
-              </Text>
+              <Text style={[styles.cancelText, { color: themeColors.text }]}>Cancel</Text>
             </TouchableOpacity>
-          ))}
-          
-          <TouchableOpacity
-            style={[styles.cancelButton, { marginTop: spacing.sm }]}
-            onPress={onClose}
-          >
-            <Text style={[styles.cancelText, { color: themeColors.text }]}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
+          </View>
+        </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
   );
