@@ -466,9 +466,6 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
                     allowsFullscreen
                     allowsPictureInPicture
                   />
-                  {/* Play/Pause overlay could go here, but for feed we often strictly use controls or auto-play. 
-                      For now, simple implementation since iOS/Android behavior varies. 
-                      Adding a simple play control could be nice if auto-play isn't perfect. */}
                   <TouchableOpacity 
                     style={StyleSheet.absoluteFill} 
                     onPress={() => {
@@ -480,13 +477,6 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
                         }
                     }}
                   />
-                  {!player.playing && (
-                      <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', pointerEvents: 'none' }]}>
-                          <View style={{ backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 30, padding: 10 }}>
-                              <IconSymbol ios_icon_name="play.fill" android_material_icon_name="play-arrow" size={30} color="#FFF" />
-                          </View>
-                      </View>
-                  )}
                 </View>
               ) : (
                 (post.type === 'image' || post.type === 'post') && (
