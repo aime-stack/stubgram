@@ -26,6 +26,7 @@ export interface LinkMetadata {
   image: string | null;
   favicon: string | null;
   siteName: string | null;
+  domain: string | null;  // Hostname for display
   content: string | null;
   canonicalUrl: string | null;
   status: 'success' | 'partial' | 'failed';
@@ -114,8 +115,10 @@ function isShortUrl(url: URL): boolean {
 
 function createFailedResponse(url: string, error: string): LinkMetadata {
   let siteName: string | null = null;
+  let domain: string | null = null;
   try {
-    siteName = new URL(url).hostname;
+    domain = new URL(url).hostname;
+    siteName = domain;
   } catch {
     // Invalid URL, leave siteName as null
   }
@@ -127,6 +130,7 @@ function createFailedResponse(url: string, error: string): LinkMetadata {
     image: null,
     favicon: null,
     siteName,
+    domain,
     content: null,
     canonicalUrl: null,
     status: 'failed',
@@ -237,6 +241,7 @@ async function extractTwitterMetadata(url: string): Promise<LinkMetadata | null>
         image: tweet.media?.photos?.[0]?.url || tweet.author?.avatar_url || null,
         favicon: 'https://abs.twimg.com/favicons/twitter.2.ico',
         siteName: 'X (Twitter)',
+        domain: 'x.com',
         content: tweet.text || null,
         canonicalUrl: url,
         status: 'success',
@@ -409,6 +414,7 @@ export async function extractLinkMetadata(inputUrl: string): Promise<LinkMetadat
     image: extractedData.image || null,
     favicon: extractedData.favicon || `${validUrl.origin}/favicon.ico`,
     siteName: extractedData.siteName || validUrl.hostname,
+    domain: validUrl.hostname,
     content: extractedData.content || null,
     canonicalUrl: extractedData.canonicalUrl || null,
     status: hasMinimalData ? 'success' : (extractedData.siteName ? 'partial' : 'failed'),

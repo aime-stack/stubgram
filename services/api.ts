@@ -282,6 +282,7 @@ class ApiClient {
     image: string | null;
     favicon: string | null;
     siteName: string | null;
+    domain: string | null;
     content: string | null;
     canonicalUrl: string | null;
     status: 'success' | 'partial' | 'failed';
@@ -311,9 +312,9 @@ class ApiClient {
       clearTimeout(timeoutId);
       
       // Return graceful degradation instead of throwing
-      let siteName: string | null = null;
+      let domain: string | null = null;
       try {
-        siteName = new URL(url).hostname;
+        domain = new URL(url).hostname;
       } catch {
         // Invalid URL
       }
@@ -324,7 +325,8 @@ class ApiClient {
         description: null,
         image: null,
         favicon: null,
-        siteName,
+        siteName: domain,
+        domain,
         content: null,
         canonicalUrl: null,
         status: 'failed',
@@ -332,6 +334,7 @@ class ApiClient {
       };
     }
   }
+
 
 
   async getPost(postId: string) {
