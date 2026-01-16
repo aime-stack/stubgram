@@ -1,6 +1,8 @@
 {
     "imports": {
         "@supabase/supabase-js": "jsr:@supabase/supabase-js@2",
-        "livekit-server-sdk": "npm:livekit-server-sdk@2.9.2"
+        "livekit-server-sdk": "npm:livekit-server-sdk@2.9.2",
+        "std/": "https://deno.land/std@0.168.0/",
+        "deno_dom": "https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts"
     }
 }
