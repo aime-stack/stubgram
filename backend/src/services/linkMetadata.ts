@@ -217,41 +217,72 @@ interface FxTwitterResponse {
 
 async function extractTwitterMetadata(url: string): Promise<LinkMetadata | null> {
   try {
-    // Convert x.com/twitter.com URL to fxtwitter API URL
-    const apiUrl = url
-      .replace('x.com', 'api.fxtwitter.com')
-      .replace('twitter.com', 'api.fxtwitter.com');
+    const urlObj = new URL(url);
+    const path = urlObj.pathname + urlObj.search;
+
+    // 1. Try fxtwitter JSON API first
+    const apiUrl = `https://api.fxtwitter.com${path}`;
     
-    const response = await fetchWithTimeout(apiUrl, {
+    console.log('[LinkMetadata] Trying fxtwitter API:', apiUrl);
+    
+    const apiResponse = await fetchWithTimeout(apiUrl, {
       headers: { 'User-Agent': getRandomUserAgent() },
     });
     
-    if (!response.ok) {
-      return null;
+    if (apiResponse.ok) {
+      const data = await apiResponse.json() as FxTwitterResponse;
+      if (data?.tweet) {
+        const tweet = data.tweet;
+        return {
+          url,
+          title: `${tweet.author?.name || 'Tweet'} (@${tweet.author?.screen_name || 'unknown'})`,
+          description: tweet.text || null,
+          image: tweet.media?.photos?.[0]?.url || tweet.author?.avatar_url || null,
+          favicon: 'https://abs.twimg.com/favicons/twitter.2.ico',
+          siteName: 'X (Twitter)',
+          domain: 'x.com',
+          content: tweet.text || null,
+          canonicalUrl: url,
+          status: 'success',
+          error: null,
+        };
+      }
     }
+
+    // 2. Fallback to fxtwitter HTML scraping (very reliable for OG tags)
+    const fallbackUrl = `https://fxtwitter.com${path}`;
     
-    const data = await response.json() as FxTwitterResponse;
+    console.log('[LinkMetadata] Falling back to fxtwitter HTML:', fallbackUrl);
     
-    if (data?.tweet) {
-      const tweet = data.tweet;
+    const htmlResponse = await fetchWithTimeout(fallbackUrl, {
+      headers: {
+        'User-Agent': getRandomUserAgent(),
+        'Accept': 'text/html',
+      },
+    });
+
+    if (htmlResponse.ok) {
+      const html = await htmlResponse.text();
+      const extracted = parseHtml(html, new URL(fallbackUrl));
+      
       return {
         url,
-        title: `${tweet.author?.name || 'Tweet'} (@${tweet.author?.screen_name || 'unknown'})`,
-        description: tweet.text || null,
-        image: tweet.media?.photos?.[0]?.url || tweet.author?.avatar_url || null,
-        favicon: 'https://abs.twimg.com/favicons/twitter.2.ico',
+        title: extracted.title || null,
+        description: extracted.description || null,
+        image: extracted.image || null,
+        favicon: extracted.favicon || 'https://abs.twimg.com/favicons/twitter.2.ico',
         siteName: 'X (Twitter)',
         domain: 'x.com',
-        content: tweet.text || null,
+        content: extracted.content || null,
         canonicalUrl: url,
-        status: 'success',
-        error: null,
+        status: extracted.title ? 'success' : 'failed',
+        error: extracted.title ? null : 'Failed to extract from fxtwitter HTML',
       };
     }
     
     return null;
-  } catch (error) {
-    console.warn('[LinkMetadata] Twitter extraction failed:', error);
+  } catch (error: any) {
+    console.warn('[LinkMetadata] Twitter extraction failed:', error.message);
     return null;
   }
 }
@@ -361,7 +392,7 @@ export async function extractLinkMetadata(inputUrl: string): Promise<LinkMetadat
       setCache(inputUrl, twitterResult);
       return twitterResult;
     }
-    // Fall through to standard extraction if Twitter API fails
+    // Fall through to standard extraction if Twitter API & Fallback fail
   }
   
   // 5. Standard HTTP fetch + HTML parsing
