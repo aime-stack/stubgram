@@ -16,6 +16,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { PostCard } from '@/components/PostCard';
 import { Post, Comment } from '@/types';
 import { apiClient } from '@/services/api';
@@ -56,6 +57,15 @@ export default function PostDetailScreen() {
       console.error('Failed to load comments:', error);
     }
   }, [id]);
+
+  // Video Player Setup
+  const isVideo = post?.type === 'video' || (post?.mediaUrl && (post.mediaUrl.endsWith('.mp4') || post.mediaUrl.endsWith('.mov')));
+  
+  const player = useVideoPlayer((isVideo && post?.mediaUrl) ? post.mediaUrl : null, (player) => {
+    player.loop = true;
+    player.muted = false; // Details view should have sound by default or be toggleable
+    player.play();
+  });
 
   useEffect(() => {
     loadPost();
@@ -122,8 +132,8 @@ export default function PostDetailScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'} 
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
     >
       {/* Header */}
       <View style={styles.header}>
@@ -141,7 +151,7 @@ export default function PostDetailScreen() {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 100 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -175,8 +185,20 @@ export default function PostDetailScreen() {
 
           <Text style={styles.mainContentText}>{post.content}</Text>
 
+
           {post.mediaUrl && (
-            <Image source={{ uri: post.mediaUrl }} style={styles.mainMedia} resizeMode="cover" />
+            isVideo ? (
+                <View style={[styles.mainMedia, { backgroundColor: '#000', aspectRatio: post.aspectRatio || (9/16) }]}>
+                  <VideoView
+                    player={player}
+                    style={{ flex: 1, borderRadius: borderRadius.lg }}
+                    contentFit="cover"
+                    nativeControls={true}
+                  />
+                </View>
+            ) : (
+                <Image source={{ uri: post.mediaUrl }} style={[styles.mainMedia, { aspectRatio: post.aspectRatio || 1 }]} resizeMode="cover" />
+            )
           )}
 
           <View style={styles.timeRow}>

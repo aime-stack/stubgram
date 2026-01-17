@@ -20,6 +20,7 @@ import { livekitService } from '@/services/livekit';
 import { apiClient } from '@/services/api';
 import { useNetworkQuality } from '@/hooks/useNetworkQuality';
 import { RoomEvent, ConnectionQuality, Participant } from 'livekit-client';
+
 import { Meeting, MeetingParticipant } from '@/types';
 import * as Network from 'expo-network';
 import * as Haptics from 'expo-haptics';

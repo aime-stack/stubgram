@@ -26,6 +26,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { apiClient } from '@/services/api';
 import { useWalletStore } from '@/stores/walletStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useFollowStore } from '@/stores/followStore';
 import { PostActionsSheet } from '@/components/PostActionsSheet';
 import { ReportModal } from '@/components/ReportModal';
 
@@ -72,7 +73,8 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
 
   const [isLiked, setIsLiked] = useState(post.isLiked);
   const [likesCount, setLikesCount] = useState(post.likesCount);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const { isFollowing: checkIsFollowing, follow, unfollow, setFollowingStatus } = useFollowStore();
+  const isFollowing = checkIsFollowing(post.userId);
   const [followLoading, setFollowLoading] = useState(false);
 
   // Check if current user is viewing their own post
@@ -82,9 +84,21 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
 
   useEffect(() => {
-    // If we have a valid aspect ratio from DB (and it's not just the default 1.0 for legacy posts which might actually be different), use it.
-    // However, since we defaulted to 1.0 in migration, we might want to still check Image.getSize for older posts if we suspect it's wrong.
-    // But for V2, create-post sends exact ratio.
+    // Sync global store with prop data on mount/update if not already set
+    // This ensures if we load a post and valid 'isFollowing' data comes from API, we respect it
+    if (post.user.isFollowing !== undefined) {
+         // Only set if we haven't tracked this user yet or to sync up? 
+         // Strategy: Trust the prop 'post.user' as latest truth when component mounts
+         // But be careful not to overwrite valid user interactions.
+         // A safe bet is to initialize if false in store but true in prop.
+         if (post.user.isFollowing && !isFollowing) {
+             setFollowingStatus(post.userId, true);
+         }
+    }
+  }, [post.user.isFollowing, post.userId]);
+
+  useEffect(() => {
+    // Legacy aspect ratio code...
     if (post.aspectRatio && post.aspectRatio !== 1.0) {
         setAspectRatio(post.aspectRatio);
         return;
@@ -104,7 +118,7 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
     }
   }, [post.mediaUrl, post.type, post.aspectRatio]);
 
-  // Video Player Setup
+  // Video Player Setup logic...
   const isVideo = post.type === 'video' || (post.mediaUrl && (post.mediaUrl.endsWith('.mp4') || post.mediaUrl.endsWith('.mov')));
   
   const player = useVideoPlayer((isVideo && post.mediaUrl) ? post.mediaUrl : null, (player) => {
@@ -114,6 +128,14 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
     player.play();
   });
 
+  const [isMuted, setIsMuted] = useState(true);
+
+  const toggleMute = () => {
+      const newMuted = !isMuted;
+      setIsMuted(newMuted);
+      player.muted = newMuted;
+  };
+
   const handleFollow = async () => {
     if (followLoading || isOwnPost) return;
 
@@ -122,15 +144,25 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       if (isFollowing) {
+        // Optimistic update
+        unfollow(post.userId);
+        
         await apiClient.unfollowUser(post.userId);
-        setIsFollowing(false);
       } else {
-        await apiClient.followUser(post.userId);
-        setIsFollowing(true);
+        // Optimistic update
+        follow(post.userId);
         addCoins(3, `Followed @${post.user.username}`);
+
+        await apiClient.followUser(post.userId);
       }
     } catch (error) {
       console.error('Follow action failed:', error);
+      // Revert on error
+      if (isFollowing) {
+          follow(post.userId); // Re-follow if unfollow failed
+      } else {
+          unfollow(post.userId); // Un-follow if follow failed
+      }
     } finally {
       setFollowLoading(false);
     }
@@ -469,6 +501,7 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
                     allowsFullscreen
                     allowsPictureInPicture
                   />
+                  {/* Play/Pause Area */}
                   <TouchableOpacity 
                     style={StyleSheet.absoluteFill} 
                     onPress={() => {
@@ -476,10 +509,28 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
                             player.pause();
                         } else {
                             player.play();
-                            player.muted = false; // Unmute on explicit play
                         }
                     }}
                   />
+                  {/* Mute Toggle Button */}
+                  <TouchableOpacity 
+                    style={{
+                        position: 'absolute',
+                        bottom: 12,
+                        right: 12,
+                        backgroundColor: 'rgba(0,0,0,0.6)',
+                        padding: 6,
+                        borderRadius: 20,
+                    }}
+                    onPress={toggleMute}
+                  >
+                    <IconSymbol 
+                        ios_icon_name={isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill"} 
+                        android_material_icon_name={isMuted ? "volume-off" : "volume-up"} 
+                        size={16} 
+                        color="#FFF" 
+                    />
+                  </TouchableOpacity>
                 </View>
               ) : (
                 (post.type === 'image' || post.type === 'post') && (

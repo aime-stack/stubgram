@@ -21,6 +21,7 @@ import { livekitService } from '@/services/livekit';
 import { useSpacePresence } from '@/hooks/useSpacePresence';
 import { useNetworkQuality } from '@/hooks/useNetworkQuality';
 import { RoomEvent, ConnectionQuality, Participant } from 'livekit-client';
+
 import * as Network from 'expo-network';
 import * as Haptics from 'expo-haptics';
 
