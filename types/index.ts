@@ -58,6 +58,7 @@ export interface Post {
   mediaUrls?: Array<{ url: string; type: 'image' | 'video'; aspectRatio: number }>; // Carousel posts
   resharedFrom?: string;
   originalPost?: Post;
+  feeling?: string; // e.g. "happy", "excited"
 }
 
 export interface Reel extends Post {

@@ -1,6 +1,7 @@
-import { registerGlobals } from '@livekit/react-native';
+// LIVEKIT DISABLED FOR TESTING
+// import { registerGlobals } from '@livekit/react-native';
 
 // Polyfill WebRTC
-registerGlobals();
+// registerGlobals();
 
 import 'expo-router/entry';

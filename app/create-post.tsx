@@ -50,6 +50,9 @@ export default function CreatePostScreen() {
     }
   }, [params.mediaUri, params.mediaType]);
   const [pollOptions, setPollOptions] = useState<string[]>([]);
+  const [feeling, setFeeling] = useState<string | undefined>(undefined);
+  const [showFeelingSelector, setShowFeelingSelector] = useState(false);
+  const FEELINGS = ['😊 Happy', '😔 Sad', '🎉 Excited', '😴 Tired', '🤔 Thinking', '❤️ Loved', '😡 Angry', '🤢 Sick'];
   const [isLoading, setIsLoading] = useState(false);
   const [showPollInput, setShowPollInput] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -91,14 +94,14 @@ export default function CreatePostScreen() {
   const handlePickMedia = async (type: 'image' | 'video') => {
     try {
       const isPost = postType === 'post';
-      // For Reels, we still enforce single video. For Posts, allow multiple.
+      // Enable multi-selection for images in Posts
       const allowsMultiple = isPost && type === 'image'; 
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: type === 'video' ? ['videos'] : ['images'],
         quality: 0.8,
         allowsEditing: false, 
-        allowsMultipleSelection: allowsMultiple, // Enable multi-select
+        allowsMultipleSelection: allowsMultiple,
         selectionLimit: allowsMultiple ? 10 : 1,
       });
 
@@ -152,6 +155,15 @@ export default function CreatePostScreen() {
       setMediaUri(null);
       setPostType('post'); // Polls are only for posts
     }
+  };
+
+  const toggleFeeling = () => {
+    setShowFeelingSelector(!showFeelingSelector);
+  };
+
+  const selectFeeling = (f: string) => {
+    setFeeling(f);
+    setShowFeelingSelector(false);
   };
 
   const handleCreatePost = async () => {
@@ -224,6 +236,7 @@ export default function CreatePostScreen() {
         communityId: params.communityId,
         aspectRatio: aspectRatio,
         originalMetadata: { width: aspectRatio * 100, height: 100 },
+        feeling: feeling,
       });
 
       // V2: Points handled by backend. We just notify user.
@@ -324,12 +337,43 @@ export default function CreatePostScreen() {
               placeholderTextColor={colors.textSecondary}
               multiline
               autoFocus
-              value={content}
               onChangeText={setContent}
               textAlignVertical="top"
             />
           </View>
         </View>
+
+        {/* Feeling Display/Selector */}
+         {feeling && (
+             <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, marginBottom: spacing.sm }}>
+                 <Text style={{ fontSize: 14, color: colors.text }}>is feeling {feeling}</Text>
+                 <TouchableOpacity onPress={() => setFeeling(undefined)} style={{ marginLeft: 8 }}>
+                     <IconSymbol ios_icon_name="xmark" android_material_icon_name="close" size={16} color={colors.textSecondary} />
+                 </TouchableOpacity>
+             </View>
+         )}
+
+         {showFeelingSelector && (
+             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: spacing.md, marginBottom: spacing.md }}>
+                 {FEELINGS.map(f => (
+                     <TouchableOpacity
+                        key={f}
+                        style={{ 
+                            backgroundColor: colors.card, 
+                            paddingHorizontal: 12, 
+                            paddingVertical: 6, 
+                            borderRadius: 16, 
+                            marginRight: 8,
+                            borderWidth: 1,
+                            borderColor: colors.border
+                        }}
+                        onPress={() => selectFeeling(f)}
+                     >
+                         <Text style={{ fontSize: 13, color: colors.text }}>{f}</Text>
+                     </TouchableOpacity>
+                 ))}
+             </ScrollView>
+         )}
 
         {/* Media Preview */}
         {selectedMedia.length > 0 ? (
@@ -422,7 +466,10 @@ export default function CreatePostScreen() {
           <IconSymbol ios_icon_name="video.fill" android_material_icon_name="videocam" size={28} color={colors.primary} />
         </TouchableOpacity>
         <TouchableOpacity onPress={togglePoll} style={styles.toolButton}>
-          <IconSymbol ios_icon_name="chart.bar" android_material_icon_name="poll" size={24} color={colors.primary} />
+          <IconSymbol ios_icon_name="chart.bar" android_material_icon_name="poll" size={24} color={showPollInput ? colors.primary : colors.text} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={toggleFeeling} style={styles.toolButton}>
+          <IconSymbol ios_icon_name="face.smiling" android_material_icon_name="mood" size={24} color={feeling ? colors.primary : colors.text} />
         </TouchableOpacity>
         <View style={styles.characterCount}>
           <Text style={[styles.countText, content.length > 280 && { color: colors.error }]}>

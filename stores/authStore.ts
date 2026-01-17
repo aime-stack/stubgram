@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import { User } from '@/types';
+import { useFollowStore } from './followStore';
 
 interface AuthState {
   user: User | null;
@@ -117,6 +118,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       };
 
       set({ user: appUser, isAuthenticated: true, isLoading: false });
+
+      // Hydrate Follow Store
+      const { data: follows } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', session.user.id);
+      
+      if (follows) {
+          const followingIds = follows.map(f => f.following_id);
+          useFollowStore.getState().initializeFollowing(followingIds);
+      }
     } catch (error) {
       console.error('Failed to load user:', error);
       set({ isLoading: false, isAuthenticated: false });

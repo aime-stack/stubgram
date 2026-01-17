@@ -1,74 +1,58 @@
-import {
-    useParticipant,
-    useRoom,
-} from '@livekit/react-native';
-import {
-    Room,
-    RoomEvent,
-    RoomOptions,
-    Track,
-    Participant,
-    ConnectionQuality,
-    RoomConnectOptions,
-    AudioPresets,
-    VideoPresets,
-} from 'livekit-client';
+// LIVEKIT TEMPORARILY DISABLED FOR TESTING
+// import {
+//     useParticipant,
+//     useRoom,
+// } from '@livekit/react-native';
+// import {
+//     Room,
+//     RoomEvent,
+//     RoomOptions,
+//     Track,
+//     Participant,
+//     ConnectionQuality,
+//     RoomConnectOptions,
+//     AudioPresets,
+//     VideoPresets,
+// } from 'livekit-client';
 
+// Mock LiveKit service for testing without LiveKit dependencies
 class LiveKitService {
-    private room: Room | null = null;
+    private room: any = null;
 
-    async connect(url: string, token: string, options: RoomConnectOptions = {}): Promise<Room> {
-        if (this.room) {
-            await this.disconnect();
-        }
-
-        this.room = new Room({
-            adaptiveStream: true,
-            dynacast: true,
-            publishDefaults: {
-                simulcast: true,
-                videoSimulcastLayers: [
-                    VideoPresets.h540,
-                    VideoPresets.h216,
-                ],
-                videoCodec: 'vp8',
-            },
-        });
-
-        await this.room.connect(url, token, options);
-        console.log('Connected to LiveKit room', this.room.name);
+    async connect(url: string, token: string) {
+        console.log('[LiveKit DISABLED] Mock connect called with:', { url, token });
+        // Return a mock room object
+        this.room = {
+            name: 'mock-room',
+            on: () => {},
+            localParticipant: {
+                setMicrophoneEnabled: async () => {},
+                setCameraEnabled: async () => {},
+                isMicrophoneEnabled: false,
+            }
+        };
         return this.room;
     }
 
     async disconnect() {
-        if (this.room) {
-            await this.room.disconnect();
-            this.room = null;
-        }
+        console.log('[LiveKit DISABLED] Mock disconnect called');
+        this.room = null;
     }
 
-    getRoom(): Room | null {
+    getRoom() {
         return this.room;
     }
 
     async enableVideo() {
-        if (this.room && this.room.localParticipant) {
-            await this.room.localParticipant.setCameraEnabled(true);
-        }
+        console.log('[LiveKit DISABLED] Mock enableVideo called');
     }
 
     async disableVideo() {
-        if (this.room && this.room.localParticipant) {
-            await this.room.localParticipant.setCameraEnabled(false);
-        }
+        console.log('[LiveKit DISABLED] Mock disableVideo called');
     }
 
-    async toggleMute(): Promise<boolean> {
-        if (this.room && this.room.localParticipant) {
-            const isEnabled = this.room.localParticipant.isMicrophoneEnabled;
-            await this.room.localParticipant.setMicrophoneEnabled(!isEnabled);
-            return !isEnabled;
-        }
+    async toggleMute() {
+        console.log('[LiveKit DISABLED] Mock toggleMute called');
         return true;
     }
 }

@@ -83,6 +83,14 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
   const [aspectRatio, setAspectRatio] = useState(post.aspectRatio || 1.0);
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
 
+  const [pollOptions, setPollOptions] = useState(post.pollOptions);
+  const [hasVoted, setHasVoted] = useState(post.pollOptions?.some(opt => opt.isVoted) || false);
+
+  useEffect(() => {
+     // Increment view count on mount
+     apiClient.incrementPostView(post.id);
+  }, []);
+
   useEffect(() => {
     // Sync global store with prop data on mount/update if not already set
     // This ensures if we load a post and valid 'isFollowing' data comes from API, we respect it
@@ -326,6 +334,28 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
     }
   };
 
+  const handleVote = async (optionIndex: number) => {
+      if (hasVoted) return;
+      
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        
+        // Optimistic Update
+        const newOptions = [...(pollOptions || [])];
+        if (newOptions[optionIndex]) {
+            newOptions[optionIndex].votes = (newOptions[optionIndex].votes || 0) + 1;
+            newOptions[optionIndex].isVoted = true; 
+        }
+        setPollOptions(newOptions);
+        setHasVoted(true);
+
+        await apiClient.votePoll(post.id, optionIndex);
+      } catch (error) {
+        Alert.alert("Error", "Failed to submit vote");
+        // Revert optimization if needed, or just let it be for MVP
+      }
+  };
+
   const formatTime = (date: string) => {
     const now = new Date();
     const postDate = new Date(date);
@@ -352,7 +382,10 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
           />
           <View>
             <View style={themedStyles.nameRow}>
-              <Text style={themedStyles.name} numberOfLines={1}>{post.user.username}</Text>
+              <Text style={themedStyles.name} numberOfLines={1}>
+                  {post.user.username}
+                  {post.feeling && <Text style={{ fontWeight: '400', color: themeColors.textSecondary }}> is feeling {post.feeling}</Text>}
+              </Text>
               {post.user.isVerified && (
                 <IconSymbol
                   ios_icon_name="checkmark.seal.fill"
@@ -434,57 +467,177 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
               </Text>
             )}
 
-            {/* Carousel Render Logic */}
-            {post.mediaUrls && post.mediaUrls.length > 0 ? (
-                <View>
-                    <FlatList
-                        data={post.mediaUrls}
-                        horizontal
-                        pagingEnabled
-                        showsHorizontalScrollIndicator={false}
-                        bounces={false}
-                        keyExtractor={(_, index) => index.toString()}
-                        onMomentumScrollEnd={(e) => {
-                            const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
-                            setCurrentCarouselIndex(newIndex);
-                        }}
-                        renderItem={({ item }) => {
-                            if (item.type === 'video') {
-                                // Simple video render for carousel - optimized for muted feed view
-                                // Note: In a real app we'd need more complex visibility logic to play only the visible one
-                                return (
-                                    <View style={{ width: width, aspectRatio: item.aspectRatio || (9/16), backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-                                        <IconSymbol ios_icon_name="play.fill" android_material_icon_name="play-arrow" size={50} color="#FFF" />
-                                        {/* Placeholder for video - for now just an icon due to complexity of multi-video lists */}
-                                    </View>
-                                )
-                            } 
-                            return (
-                                <View style={{ width: width, alignItems: 'center' }}>
-                                     <Image 
-                                        source={{ uri: item.url }} 
-                                        style={[themedStyles.media, { width: width - (spacing.md * 2), aspectRatio: item.aspectRatio || 1.0 }]} 
-                                        resizeMode="cover" 
-                                     />
+            {/* Poll Rendering */}
+            {pollOptions && pollOptions.length > 0 && (
+                <View style={{ marginHorizontal: spacing.md, marginBottom: spacing.md }}>
+                    {pollOptions.map((option, index) => {
+                        // Safe calculations for percentages (assuming total votes is sum of options)
+                        const totalVotes = pollOptions.reduce((sum, opt) => sum + (opt.votes || 0), 0) || 0;
+                        const percentage = totalVotes > 0 ? Math.round(((option.votes || 0) / totalVotes) * 100) : 0;
+                        const isVoted = hasVoted && option.isVoted; 
+
+                        return (
+                            <TouchableOpacity 
+                                key={index} 
+                                style={{
+                                    marginBottom: 8,
+                                    borderRadius: borderRadius.sm,
+                                    borderWidth: 1,
+                                    borderColor: isVoted ? colors.primary : themeColors.border,
+                                    backgroundColor: themeColors.background,
+                                    height: 44,
+                                    justifyContent: 'center',
+                                    overflow: 'hidden',
+                                    position: 'relative'
+                                }}
+                                disabled={hasVoted} 
+                                onPress={() => handleVote(index)} 
+                            >
+                                {/* Progress Bar Background */}
+                                {totalVotes > 0 && (
+                                    <View style={{
+                                        position: 'absolute',
+                                        left: 0,
+                                        top: 0,
+                                        bottom: 0,
+                                        width: `${percentage}%`,
+                                        backgroundColor: isVoted ? 'rgba(0,122,255, 0.15)' : themeColors.border, 
+                                        opacity: 0.5
+                                    }} />
+                                )}
+                                
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12 }}>
+                                    <Text style={{ fontWeight: '600', color: themeColors.text }}>{option.text}</Text>
+                                    {totalVotes > 0 && (
+                                        <Text style={{ color: themeColors.textSecondary, fontSize: 12 }}>{percentage}%</Text>
+                                    )}
                                 </View>
-                            )
-                        }}
-                    />
-                    {/* Pagination Dots */}
-                    {post.mediaUrls.length > 1 && (
-                        <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8 }}>
-                            {post.mediaUrls.map((_, index) => (
-                                <View 
+                            </TouchableOpacity>
+                        );
+                    })}
+                     <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 4 }}>
+                        {pollOptions.reduce((sum, opt) => sum + (opt.votes || 0), 0)} votes
+                    </Text>
+                </View>
+            )}
+
+            {/* Grid Layout Render Logic - Skip if it's a single video (handled by legacy logic) */}
+            {post.mediaUrls && post.mediaUrls.length > 0 && !(post.mediaUrls.length === 1 && (post.type === 'video' || post.mediaUrls[0].type === 'video')) ? (
+                <View style={{ marginHorizontal: spacing.md, borderRadius: borderRadius.md, overflow: 'hidden' }}>
+                    
+                    {/* 1 Image: Full Width (fallback for single item in array) */}
+                    {post.mediaUrls.length === 1 && (
+                        <TouchableOpacity 
+                            activeOpacity={0.9}
+                            onPress={() => router.push(`/post/${post.id}?mediaIndex=0`)}
+                            style={{ height: 400 * (post.mediaUrls[0].aspectRatio || 1) }}
+                        >
+                            <Image 
+                                source={{ uri: post.mediaUrls[0].url }} 
+                                style={{ width: '100%', height: '100%' }}
+                                resizeMode="cover" 
+                            />
+                        </TouchableOpacity>
+                    )}
+
+                    {/* 2 Images: Side by Side */}
+                    {post.mediaUrls.length === 2 && (
+                        <View style={{ flexDirection: 'row', height: 300, gap: 2 }}>
+                            {post.mediaUrls.map((item, index) => (
+                                <TouchableOpacity 
                                     key={index}
-                                    style={{
-                                        width: 6, 
-                                        height: 6, 
-                                        borderRadius: 3, 
-                                        backgroundColor: index === currentCarouselIndex ? colors.primary : themeColors.border,
-                                        marginHorizontal: 3
-                                    }} 
-                                />
+                                    activeOpacity={0.9}
+                                    onPress={() => router.push(`/post/${post.id}?mediaIndex=${index}`)}
+                                    style={{ flex: 1 }}
+                                >
+                                    <Image 
+                                        source={{ uri: item.url }} 
+                                        style={{ width: '100%', height: '100%' }}
+                                        resizeMode="cover" 
+                                    />
+                                </TouchableOpacity>
                             ))}
+                        </View>
+                    )}
+
+                    {/* 3 Images: One big on left, two stacked on right */}
+                    {post.mediaUrls.length === 3 && (
+                        <View style={{ flexDirection: 'row', height: 300, gap: 2 }}>
+                            <TouchableOpacity 
+                                activeOpacity={0.9} 
+                                onPress={() => router.push(`/post/${post.id}?mediaIndex=0`)}
+                                style={{ flex: 1 }}
+                            >
+                                <Image source={{ uri: post.mediaUrls[0].url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                            </TouchableOpacity>
+                            <View style={{ flex: 1, gap: 2 }}>
+                                {post.mediaUrls.slice(1).map((item, index) => (
+                                    <TouchableOpacity 
+                                        key={index}
+                                        activeOpacity={0.9}
+                                        onPress={() => router.push(`/post/${post.id}?mediaIndex=${index + 1}`)}
+                                        style={{ flex: 1 }}
+                                    >
+                                        <Image source={{ uri: item.url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+                    )}
+
+                    {/* 4 Images: 2x2 Grid */}
+                    {post.mediaUrls.length === 4 && (
+                        <View style={{ height: 300, gap: 2 }}>
+                            <View style={{ flex: 1, flexDirection: 'row', gap: 2 }}>
+                                {post.mediaUrls.slice(0, 2).map((item, index) => (
+                                    <TouchableOpacity 
+                                        key={index}
+                                        activeOpacity={0.9}
+                                        onPress={() => router.push(`/post/${post.id}?mediaIndex=${index}`)}
+                                        style={{ flex: 1 }}
+                                    >
+                                        <Image source={{ uri: item.url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                            <View style={{ flex: 1, flexDirection: 'row', gap: 2 }}>
+                                {post.mediaUrls.slice(2, 4).map((item, index) => (
+                                    <TouchableOpacity 
+                                        key={index + 2}
+                                        activeOpacity={0.9}
+                                        onPress={() => router.push(`/post/${post.id}?mediaIndex=${index + 2}`)}
+                                        style={{ flex: 1 }}
+                                    >
+                                        <Image source={{ uri: item.url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Fallback for > 4 or other cases (e.g. 1) handled mainly by Single Logic below or simple slice */}
+                    {post.mediaUrls.length > 4 && (
+                        <View style={{ height: 300, gap: 2 }}>
+                            <View style={{ flex: 1, flexDirection: 'row', gap: 2 }}>
+                                {post.mediaUrls.slice(0, 2).map((item, index) => (
+                                    <TouchableOpacity key={index} style={{ flex: 1 }} onPress={() => router.push(`/post/${post.id}?mediaIndex=${index}`)}>
+                                        <Image source={{ uri: item.url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                            <View style={{ flex: 1, flexDirection: 'row', gap: 2 }}>
+                                <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push(`/post/${post.id}?mediaIndex=2`)}>
+                                    <Image source={{ uri: post.mediaUrls[2].url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push(`/post/${post.id}?mediaIndex=3`)}>
+                                    <View style={{ width: '100%', height: '100%' }}>
+                                        <Image source={{ uri: post.mediaUrls[3].url }} style={{ width: '100%', height: '100%', opacity: 0.6 }} resizeMode="cover" />
+                                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
+                                            <Text style={{ color: '#FFF', fontSize: 20, fontWeight: 'bold' }}>+{post.mediaUrls.length - 4}</Text>
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     )}
                 </View>
@@ -583,6 +736,11 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
             />
             {repostCount > 0 && <Text style={[themedStyles.actionCount, isReposted && { color: "#00BA7C" }]}>{repostCount}</Text>}
           </TouchableOpacity>
+
+          <View style={themedStyles.actionItem}>
+             <IconSymbol ios_icon_name="eye" android_material_icon_name="visibility" size={20} color={themeColors.textSecondary} />
+             <Text style={[themedStyles.actionCount, { color: themeColors.textSecondary }]}>{(post.viewsCount || 0).toLocaleString()}</Text>
+          </View>
         </View>
 
         <View style={themedStyles.rightActions}>
@@ -600,6 +758,15 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Likes Count Footer (Restored) */}
+      {post.likesCount > 0 && (
+        <View style={{ paddingHorizontal: spacing.md, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center' }}>
+           <Text style={[typography.caption, { color: themeColors.textSecondary }]}>
+               {post.likesCount.toLocaleString()} likes
+           </Text>
+        </View>
+      )}
 
       {/* Post Actions Sheet */}
       <PostActionsSheet

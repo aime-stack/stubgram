@@ -19,7 +19,24 @@ import { supabase } from '@/lib/supabase';
 import { livekitService } from '@/services/livekit';
 import { apiClient } from '@/services/api';
 import { useNetworkQuality } from '@/hooks/useNetworkQuality';
-import { RoomEvent, ConnectionQuality, Participant } from 'livekit-client';
+// LIVEKIT DISABLED FOR TESTING
+// import { RoomEvent, ConnectionQuality, Participant } from 'livekit-client';
+
+// Mock types for testing
+type ConnectionQuality = 'excellent' | 'good' | 'poor' | 'unknown';
+const ConnectionQuality = {
+    Excellent: 'excellent' as ConnectionQuality,
+    Good: 'good' as ConnectionQuality,
+    Poor: 'poor' as ConnectionQuality,
+    Unknown: 'unknown' as ConnectionQuality,
+};
+const RoomEvent = {
+    ConnectionQualityChanged: 'connection-quality-changed',
+    Disconnected: 'disconnected',
+    ParticipantConnected: 'participant-connected',
+    ParticipantDisconnected: 'participant-disconnected',
+};
+type Participant = any;
 
 import { Meeting, MeetingParticipant } from '@/types';
 import * as Network from 'expo-network';

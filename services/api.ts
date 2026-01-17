@@ -181,6 +181,7 @@ class ApiClient {
     aspectRatio?: number;
     originalMetadata?: any;
     mediaUrls?: Array<{ url: string; type: 'image' | 'video'; aspectRatio: number }>; // Carousel support
+    feeling?: string;
   }) {
     const user = await this.requireAuth();
 
@@ -196,8 +197,16 @@ class ApiClient {
         thumbnail_url: data.thumbnailUrl,
         link_url: data.linkUrl,
         link_metadata: data.linkMetadata,
-        media_metadata: data.mediaMetadata,
-        poll_options: data.pollOptions ? JSON.stringify(data.pollOptions) : undefined,
+        // Store feeling in media_metadata along with other metadata
+        media_metadata: { ...data.mediaMetadata, feeling: data.feeling },
+        poll_options: data.pollOptions ? JSON.stringify(
+            data.pollOptions.map((opt, idx) => ({
+                id: `opt_${Date.now()}_${idx}`, 
+                text: opt, 
+                votes: 0, 
+                isVoted: false 
+            }))
+        ) : undefined,
         aspect_ratio: data.aspectRatio,
         original_metadata: data.originalMetadata,
         media_urls: data.mediaUrls ? JSON.stringify(data.mediaUrls) : undefined,
@@ -211,6 +220,51 @@ class ApiClient {
     const profile = await this.getProfileById(user.id);
 
     return { data: this.mapPost(post, profile) };
+  }
+
+  async incrementPostView(postId: string) {
+      try {
+          // simple increment
+          const { data: post } = await supabase.from('posts').select('views_count').eq('id', postId).single();
+          if (post) {
+            await supabase.from('posts').update({ views_count: (post.views_count || 0) + 1 }).eq('id', postId);
+          }
+      } catch (error) {
+          console.error("Failed to increment view", error);
+      }
+  }
+
+  async votePoll(postId: string, optionIndex: number) {
+      await this.requireAuth();
+      
+      const { data: post, error } = await supabase
+        .from('posts')
+        .select('poll_options')
+        .eq('id', postId)
+        .single();
+      
+      if (error || !post) throw new Error("Post not found");
+      
+      let options: any[] = [];
+      try {
+          options = typeof post.poll_options === 'string' ? JSON.parse(post.poll_options) : post.poll_options;
+      } catch (e) {
+          throw new Error("Invalid poll data");
+      }
+
+      if (!options || !options[optionIndex]) throw new Error("Invalid option");
+
+      options[optionIndex].votes = (options[optionIndex].votes || 0) + 1;
+      
+      const { error: updateError } = await supabase
+        .from('posts')
+        .update({ 
+            poll_options: JSON.stringify(options) 
+        })
+        .eq('id', postId);
+
+    if (updateError) throw updateError;
+    return { success: true };
   }
 
   async getFeed(cursor?: string, limit: number = 10) {
@@ -856,7 +910,8 @@ class ApiClient {
       thumbnailUrl: row.thumbnail_url,
       viewsCount: row.views_count || 0,
       mediaMetadata: row.media_metadata,
-      pollOptions: row.poll_options ? JSON.parse(row.poll_options) : undefined,
+      feeling: row.media_metadata?.feeling,
+      pollOptions: row.poll_options ? (typeof row.poll_options === 'string' ? JSON.parse(row.poll_options) : row.poll_options) : undefined,
       likesCount: row.likes_count || 0,
       commentsCount: row.comments_count || 0,
       sharesCount: row.shares_count || 0,
@@ -871,7 +926,8 @@ class ApiClient {
       duration: row.duration,
       resolution: row.resolution,
       linkPreview: row.link_metadata,
-      aspectRatio: row.aspect_ratio || 1.0, 
+      aspectRatio: row.aspect_ratio || 1.0,
+      mediaUrls: typeof row.media_urls === 'string' ? JSON.parse(row.media_urls) : row.media_urls,
     };
   }
 

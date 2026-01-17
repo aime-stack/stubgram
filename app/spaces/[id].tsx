@@ -20,7 +20,22 @@ import { supabase } from '@/lib/supabase';
 import { livekitService } from '@/services/livekit';
 import { useSpacePresence } from '@/hooks/useSpacePresence';
 import { useNetworkQuality } from '@/hooks/useNetworkQuality';
-import { RoomEvent, ConnectionQuality, Participant } from 'livekit-client';
+// LIVEKIT DISABLED FOR TESTING
+// import { RoomEvent, ConnectionQuality, Participant } from 'livekit-client';
+
+// Mock types for testing
+type ConnectionQuality = 'excellent' | 'good' | 'poor' | 'unknown';
+const ConnectionQuality = {
+    Excellent: 'excellent' as ConnectionQuality,
+    Good: 'good' as ConnectionQuality,
+    Poor: 'poor' as ConnectionQuality,
+    Unknown: 'unknown' as ConnectionQuality,
+};
+const RoomEvent = {
+    ConnectionQualityChanged: 'connection-quality-changed',
+    Disconnected: 'disconnected',
+};
+type Participant = any;
 
 import * as Network from 'expo-network';
 import * as Haptics from 'expo-haptics';

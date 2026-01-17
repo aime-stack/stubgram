@@ -53,18 +53,14 @@ export default function CreateStoryScreen() {
                 }
                 result = await ImagePicker.launchCameraAsync({
                     mediaTypes: storyType === 'video' ? ['videos'] : ['images'],
-                    allowsEditing: true,
-                    aspect: [9, 16],
+                    allowsEditing: false, 
                     quality: 0.8,
-                    videoMaxDuration: 30,
                 });
             } else {
                 result = await ImagePicker.launchImageLibraryAsync({
                     mediaTypes: storyType === 'video' ? ['videos'] : ['images'],
-                    allowsEditing: true,
-                    aspect: [9, 16],
+                    allowsEditing: false,
                     quality: 0.8,
-                    videoMaxDuration: 30,
                 });
             }
 
