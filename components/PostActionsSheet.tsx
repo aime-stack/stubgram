@@ -20,6 +20,9 @@ interface PostActionsSheetProps {
   onDelete?: () => void;
   onReport?: () => void;
   onBoost?: () => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  canBoost?: boolean;
 }
 
 interface ActionItem {
@@ -39,73 +42,87 @@ export const PostActionsSheet: React.FC<PostActionsSheetProps> = ({
   onDelete,
   onReport,
   onBoost,
+  canEdit = true,
+  canDelete = true,
+  canBoost = true,
 }) => {
   const { isDark } = useThemeStore();
   const themeColors = isDark ? darkColors : lightColors;
 
   // Build actions list based on post ownership
-  const actions: ActionItem[] = isOwnPost
-    ? [
-        {
-          id: 'edit',
-          label: 'Edit Post',
-          icon: 'pencil',
-          androidIcon: 'edit',
-          onPress: () => {
-            console.log('PostActionsSheet: Edit action triggered');
-            onEdit?.();
-            onClose();
-          },
+  const actions: ActionItem[] = [];
+
+  if (isOwnPost) {
+    if (canEdit) {
+      actions.push({
+        id: 'edit',
+        label: 'Edit Post',
+        icon: 'pencil',
+        androidIcon: 'edit',
+        onPress: () => {
+          console.log('PostActionsSheet: Edit action triggered');
+          onEdit?.();
+          onClose();
         },
-        {
-          id: 'boost',
-          label: 'Boost Post',
-          icon: 'flame.fill',
-          androidIcon: 'local-fire-department',
-          onPress: () => {
-            console.log('PostActionsSheet: Boost action triggered');
-            onBoost?.();
-            onClose();
-          },
+      });
+    }
+
+    if (canBoost) {
+      actions.push({
+        id: 'boost',
+        label: 'Boost Post',
+        icon: 'flame.fill',
+        androidIcon: 'local-fire-department',
+        onPress: () => {
+          console.log('PostActionsSheet: Boost action triggered');
+          onBoost?.();
+          onClose();
         },
-        {
-          id: 'delete',
-          label: 'Delete Post',
-          icon: 'trash',
-          androidIcon: 'delete',
-          onPress: () => {
-            console.log('PostActionsSheet: Delete action triggered');
-            onDelete?.();
-            onClose();
-          },
-          destructive: true,
+      });
+    }
+
+    if (canDelete) {
+      actions.push({
+        id: 'delete',
+        label: 'Delete Post',
+        icon: 'trash',
+        androidIcon: 'delete',
+        onPress: () => {
+          console.log('PostActionsSheet: Delete action triggered');
+          onDelete?.();
+          onClose();
         },
-      ]
-    : [
-        {
-          id: 'boost',
-          label: 'Boost Post',
-          icon: 'flame.fill',
-          androidIcon: 'local-fire-department',
-          onPress: () => {
-            console.log('PostActionsSheet: Boost action triggered');
-            onBoost?.();
-            onClose();
-          },
+        destructive: true,
+      });
+    }
+  } else {
+    if (canBoost) {
+      actions.push({
+        id: 'boost',
+        label: 'Boost Post',
+        icon: 'flame.fill',
+        androidIcon: 'local-fire-department',
+        onPress: () => {
+          console.log('PostActionsSheet: Boost action triggered');
+          onBoost?.();
+          onClose();
         },
-        {
-          id: 'report',
-          label: 'Report Post',
-          icon: 'exclamationmark.triangle',
-          androidIcon: 'report',
-          onPress: () => {
-            console.log('PostActionsSheet: Report action triggered');
-            onReport?.();
-            onClose();
-          },
-          destructive: true,
-        },
-      ];
+      });
+    }
+
+    actions.push({
+      id: 'report',
+      label: 'Report Post',
+      icon: 'exclamationmark.triangle',
+      androidIcon: 'report',
+      onPress: () => {
+        console.log('PostActionsSheet: Report action triggered');
+        onReport?.();
+        onClose();
+      },
+      destructive: true,
+    });
+  }
 
   return (
     <Modal

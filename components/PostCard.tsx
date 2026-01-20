@@ -29,6 +29,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useFollowStore } from '@/stores/followStore';
 import { PostActionsSheet } from '@/components/PostActionsSheet';
 import { ReportModal } from '@/components/ReportModal';
+import { canBoostPosts, canEditOrDeletePosts, isSpecialPremiumUser, normalizePremiumPlan } from '@/utils/premium';
 
 const { width } = Dimensions.get('window');
 
@@ -79,6 +80,10 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
 
   // Check if current user is viewing their own post
   const isOwnPost = user?.id === post.userId;
+  const premiumPlan = normalizePremiumPlan(user?.premiumPlan || user?.account_type || user?.accountType);
+  const canBoost = canBoostPosts(premiumPlan);
+  const canEditDelete = canEditOrDeletePosts(premiumPlan);
+  const isUserVerified = post.user.isVerified || isSpecialPremiumUser(post.user.username);
 
   const [aspectRatio, setAspectRatio] = useState(post.aspectRatio || 1.0);
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
@@ -262,7 +267,16 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editContent, setEditContent] = useState(post.content || '');
 
+  const requirePremiumAccess = (allowed: boolean, message: string) => {
+    if (allowed) return true;
+    Alert.alert('Premium required', message);
+    return false;
+  };
+
   const handleEdit = () => {
+    if (!requirePremiumAccess(canEditDelete, 'Editing posts is limited to Premium Plus. Upgrade in Premium Plans.')) {
+      return;
+    }
     setEditContent(post.content || '');
     setShowEditModal(true);
   };
@@ -280,6 +294,9 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
   };
 
   const handleDelete = () => {
+    if (!requirePremiumAccess(canEditDelete, 'Deleting posts is limited to Premium Plus. Upgrade in Premium Plans.')) {
+      return;
+    }
     Alert.alert(
       'Delete Post',
       'Are you sure you want to delete this post? This action cannot be undone.',
@@ -313,6 +330,9 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
   };
 
   const handleBoost = () => {
+    if (!requirePremiumAccess(canBoost, 'Boost Post is available on Premium and Premium Plus plans. Upgrade in Premium Plans.')) {
+      return;
+    }
     // TODO: Open boost modal with payment options (coins/RWF)
     Alert.alert(
       'Boost Post',
@@ -386,7 +406,7 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
                   {post.user.username}
                   {post.feeling && <Text style={{ fontWeight: '400', color: themeColors.textSecondary }}> is feeling {post.feeling}</Text>}
               </Text>
-              {post.user.isVerified && (
+              {isUserVerified && (
                 <IconSymbol
                   ios_icon_name="checkmark.seal.fill"
                   android_material_icon_name="verified"
@@ -651,7 +671,6 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
                     style={{ flex: 1 }}
                     contentFit="cover"
                     nativeControls={false}
-                    allowsFullscreen
                     allowsPictureInPicture
                   />
                   {/* Play/Pause Area */}
@@ -777,6 +796,9 @@ const PostCardComponent = ({ post, onLike, onComment, onShare }: PostCardProps) 
         onDelete={handleDelete}
         onReport={() => setShowReportModal(true)}
         onBoost={handleBoost}
+        canEdit={canEditDelete}
+        canDelete={canEditDelete}
+        canBoost={canBoost}
       />
 
       {/* Report Modal */}

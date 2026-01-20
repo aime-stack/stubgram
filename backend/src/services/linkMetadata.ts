@@ -43,10 +43,12 @@ interface CacheEntry {
 // ============================================================================
 
 const CONFIG = {
-  FETCH_TIMEOUT_MS: 5000,
+  FETCH_TIMEOUT_MS: 10000,
   CACHE_TTL_MS: 24 * 60 * 60 * 1000, // 24 hours
   CACHE_MAX_SIZE: 1000,
   CONTENT_MAX_LENGTH: 500,
+  MAX_RETRIES: 2,
+  RETRY_DELAY_MS: 1000,
 };
 
 // User agents that sites typically allow (social media crawlers)
@@ -151,7 +153,7 @@ function resolveUrl(relative: string | undefined, baseUrl: URL): string | null {
 }
 
 // ============================================================================
-// Fetch with Timeout
+// Fetch with Timeout and Retry
 // ============================================================================
 
 async function fetchWithTimeout(
@@ -174,6 +176,46 @@ async function fetchWithTimeout(
   }
 }
 
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = CONFIG.FETCH_TIMEOUT_MS,
+  retries: number = CONFIG.MAX_RETRIES
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, options, timeoutMs);
+      
+      // If successful or client error (4xx), don't retry
+      if (response.ok || (response.status >= 400 && response.status < 500)) {
+        return response;
+      }
+      
+      // Server error (5xx), retry
+      lastError = new Error(`HTTP ${response.status}: ${response.statusText}`);
+      
+    } catch (error: any) {
+      lastError = error;
+      
+      // Don't retry on abort/timeout for the last attempt
+      if (attempt === retries) {
+        throw lastError;
+      }
+    }
+    
+    // Exponential backoff: wait before retrying
+    if (attempt < retries) {
+      const delay = CONFIG.RETRY_DELAY_MS * Math.pow(2, attempt);
+      console.log(`[LinkMetadata] Retry ${attempt + 1}/${retries} after ${delay}ms for ${url}`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError || new Error('Fetch failed after retries');
+}
+
 // ============================================================================
 // Short URL Expansion
 // ============================================================================
@@ -185,10 +227,10 @@ async function expandShortUrl(url: string): Promise<string> {
       return url;
     }
     
-    const response = await fetchWithTimeout(url, {
+    const response = await fetchWithRetry(url, {
       method: 'HEAD',
       headers: { 'User-Agent': getRandomUserAgent() },
-    }, 3000);
+    }, 3000, 1); // Use shorter timeout and fewer retries for HEAD requests
     
     return response.url || url;
   } catch {
@@ -225,7 +267,7 @@ async function extractTwitterMetadata(url: string): Promise<LinkMetadata | null>
     
     console.log('[LinkMetadata] Trying fxtwitter API:', apiUrl);
     
-    const apiResponse = await fetchWithTimeout(apiUrl, {
+    const apiResponse = await fetchWithRetry(apiUrl, {
       headers: { 'User-Agent': getRandomUserAgent() },
     });
     
@@ -254,7 +296,7 @@ async function extractTwitterMetadata(url: string): Promise<LinkMetadata | null>
     
     console.log('[LinkMetadata] Falling back to fxtwitter HTML:', fallbackUrl);
     
-    const htmlResponse = await fetchWithTimeout(fallbackUrl, {
+    const htmlResponse = await fetchWithRetry(fallbackUrl, {
       headers: {
         'User-Agent': getRandomUserAgent(),
         'Accept': 'text/html',
@@ -401,7 +443,7 @@ export async function extractLinkMetadata(inputUrl: string): Promise<LinkMetadat
   let fetchError: string | null = null;
   
   try {
-    const response = await fetchWithTimeout(url, {
+    const response = await fetchWithRetry(url, {
       headers: {
         'User-Agent': getRandomUserAgent(),
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -413,7 +455,15 @@ export async function extractLinkMetadata(inputUrl: string): Promise<LinkMetadat
     
     // Check response status
     if (!response.ok) {
-      fetchError = `HTTP ${response.status}: ${response.statusText}`;
+      if (response.status === 401 || response.status === 403) {
+        fetchError = `Access denied (${response.status}): Site blocks automated requests`;
+      } else if (response.status === 404) {
+        fetchError = `Page not found (404)`;
+      } else if (response.status >= 500) {
+        fetchError = `Server error (${response.status}): ${response.statusText}`;
+      } else {
+        fetchError = `HTTP ${response.status}: ${response.statusText}`;
+      }
       console.warn('[LinkMetadata] HTTP error for', url, fetchError);
     } else {
       // Check content type
@@ -428,7 +478,9 @@ export async function extractLinkMetadata(inputUrl: string): Promise<LinkMetadat
     }
   } catch (error: any) {
     if (error.name === 'AbortError') {
-      fetchError = 'Request timeout';
+      fetchError = 'Request timeout after 10 seconds';
+    } else if (error.message?.includes('fetch failed')) {
+      fetchError = 'Network error: Unable to reach server';
     } else {
       fetchError = error.message || 'Fetch failed';
     }

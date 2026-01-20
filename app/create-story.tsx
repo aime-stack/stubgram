@@ -17,6 +17,7 @@ import { colors, spacing, typography, borderRadius } from '@/styles/commonStyles
 import { IconSymbol } from '@/components/IconSymbol';
 import { apiClient } from '@/services/api';
 import { useWalletStore } from '@/stores/walletStore';
+import { useStoryStore } from '@/stores/storyStore';
 import * as Haptics from 'expo-haptics';
 
 type StoryType = 'image' | 'video' | 'text';
@@ -57,10 +58,18 @@ export default function CreateStoryScreen() {
                     quality: 0.8,
                 });
             } else {
+                // Request media library permissions to ensure full gallery access
+                const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                if (status !== 'granted') {
+                    Alert.alert('Permission needed', 'We need access to your media library to select photos and videos');
+                    return;
+                }
                 result = await ImagePicker.launchImageLibraryAsync({
                     mediaTypes: storyType === 'video' ? ['videos'] : ['images'],
                     allowsEditing: false,
                     quality: 0.8,
+                    defaultTab: 'albums', // Show albums/folders view initially for full gallery access
+                    ...(Platform.OS === 'android' && { legacy: true }), // Use legacy picker on Android for broader access
                 });
             }
 
@@ -95,6 +104,9 @@ export default function CreateStoryScreen() {
 
             // Reward user with coins
             addCoins(5, 'Created a story');
+            
+            // Refresh stories feed
+            await useStoryStore.getState().refresh();
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             Alert.alert('Success', 'Story created! +5 🪙', [

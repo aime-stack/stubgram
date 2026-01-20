@@ -22,6 +22,7 @@ import { apiClient } from '@/services/api';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '@/stores/authStore';
 import { ImageModal } from '@/components/ImageModal';
+import { isSpecialPremiumUser, normalizePremiumPlan } from '@/utils/premium';
 
 export default function UserProfileScreen() {
   const router = useRouter();
@@ -36,6 +37,9 @@ export default function UserProfileScreen() {
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
 
   const isMe = currentUser?.id === id;
+  const premiumPlan = normalizePremiumPlan(user?.premiumPlan || user?.account_type || user?.accountType);
+  const isPremiumPlus = premiumPlan === 'premium_plus';
+  const isVerifiedProfile = (user?.isVerified || false) || (user ? isSpecialPremiumUser(user.username) : false);
 
   const loadUserProfile = useCallback(async () => {
     try {
@@ -202,15 +206,15 @@ export default function UserProfileScreen() {
             </View>
 
             <View style={styles.nameContainer}>
-              <View style={styles.nameRow}>
-                <Text style={styles.username}>{user.full_name || user.username}</Text>
-                {user.account_type === 'premium' && (
-                  <IconSymbol ios_icon_name="checkmark.seal.fill" android_material_icon_name="verified" size={20} color={colors.primary} />
-                )}
-                {(user.account_type === 'vip' || user.account_type === 'industry') && (
-                  <IconSymbol ios_icon_name="star.circle.fill" android_material_icon_name="stars" size={20} color="#FFD700" />
-                )}
-              </View>
+            <View style={styles.nameRow}>
+              <Text style={styles.username}>{user.full_name || user.username}</Text>
+              {isVerifiedProfile && (
+                <IconSymbol ios_icon_name="checkmark.seal.fill" android_material_icon_name="verified" size={20} color={colors.primary} />
+              )}
+              {isPremiumPlus && (
+                <IconSymbol ios_icon_name="star.circle.fill" android_material_icon_name="stars" size={20} color="#FFD700" />
+              )}
+            </View>
               <Text style={styles.handle}>@{user.username.toLowerCase()}</Text>
 
               {user.bio && <Text style={styles.bio}>{user.bio}</Text>}

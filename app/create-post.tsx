@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
+  Linking,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -58,32 +59,50 @@ export default function CreatePostScreen() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [linkMetadata, setLinkMetadata] = useState<any>(null);
   const [isFetchingMetadata, setIsFetchingMetadata] = useState(false);
+  const [lastFetchedUrl, setLastFetchedUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const urls = content.match(urlRegex);
+    const currentUrl = urls && urls.length > 0 ? urls[0] : null;
     
-    if (urls && urls.length > 0 && !linkMetadata && !isFetchingMetadata && !mediaUri) {
-        const fetchMetadata = async () => {
-            setIsFetchingMetadata(true);
-            try {
-                const metadata = await apiClient.fetchLinkMetadata(urls[0]);
-                // Only set metadata if extraction was successful or partial
-                if (metadata && metadata.status !== 'failed') {
-                    setLinkMetadata(metadata);
-                } else {
-                    console.log('Link metadata extraction failed:', metadata?.error);
-                    // Don't set metadata - show nothing instead of broken preview
-                }
-            } catch (error) {
-                console.error('Failed to fetch link metadata:', error);
-            } finally {
-                setIsFetchingMetadata(false);
-            }
-        };
-        fetchMetadata();
+    // Clear metadata if no URL in content
+    if (!currentUrl && linkMetadata) {
+      setLinkMetadata(null);
+      setLastFetchedUrl(null);
+      return;
     }
-  }, [content, linkMetadata, isFetchingMetadata, mediaUri]);
+    
+    // Only fetch if URL exists, changed, not currently fetching, and no media
+    if (currentUrl && currentUrl !== lastFetchedUrl && !isFetchingMetadata && !mediaUri) {
+      // Debounce to avoid fetching while user is typing/pasting
+      const debounceTimer = setTimeout(async () => {
+        setIsFetchingMetadata(true);
+        setLastFetchedUrl(currentUrl);
+        
+        // Add frontend timeout as safety net (12s = backend 10s + 2s buffer)
+        const timeoutId = setTimeout(() => {
+          setIsFetchingMetadata(false);
+          console.warn('[Link Metadata] Frontend timeout: fetch took longer than 12s');
+        }, 12000);
+        
+        try {
+          const metadata = await apiClient.fetchLinkMetadata(currentUrl);
+          // Set metadata regardless of status - we'll show error UI for failed ones
+          if (metadata) {
+            setLinkMetadata(metadata);
+          }
+        } catch (error) {
+          console.error('[Link Metadata] Fetch error:', error);
+        } finally {
+          clearTimeout(timeoutId);
+          setIsFetchingMetadata(false);
+        }
+      }, 500); // 500ms debounce delay
+      
+      return () => clearTimeout(debounceTimer);
+    }
+  }, [content, mediaUri]); // Only depend on content and mediaUri - NOT linkMetadata or isFetchingMetadata
 
 
   const [aspectRatio, setAspectRatio] = useState(1.0);
@@ -93,6 +112,13 @@ export default function CreatePostScreen() {
 
   const handlePickMedia = async (type: 'image' | 'video') => {
     try {
+      // Request media library permissions to ensure full gallery access
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'We need access to your media library to select photos and videos');
+        return;
+      }
+
       const isPost = postType === 'post';
       // Enable multi-selection for images in Posts
       const allowsMultiple = isPost && type === 'image'; 
@@ -103,6 +129,8 @@ export default function CreatePostScreen() {
         allowsEditing: false, 
         allowsMultipleSelection: allowsMultiple,
         selectionLimit: allowsMultiple ? 10 : 1,
+        defaultTab: 'albums', // Show albums/folders view initially for full gallery access
+        ...(Platform.OS === 'android' && { legacy: true }), // Use legacy picker on Android for broader access
       });
 
       if (!result.canceled) {
@@ -411,17 +439,54 @@ export default function CreatePostScreen() {
         {/* Link Preview */}
         {linkMetadata && (
           <View style={styles.linkPreviewContainer}>
-            {linkMetadata.image && (
-                <Image source={{ uri: linkMetadata.image }} style={styles.linkImage} />
+            {linkMetadata.status === 'failed' ? (
+              // Error state - show clickable link with URL
+              <View style={styles.linkErrorContainer}>
+                <TouchableOpacity 
+                  style={styles.linkErrorContent}
+                  onPress={() => {
+                    if (linkMetadata.url) {
+                      Linking.openURL(linkMetadata.url).catch(err => {
+                        console.error('Failed to open URL:', err);
+                        Alert.alert('Error', 'Could not open link');
+                      });
+                    }
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <IconSymbol ios_icon_name="link" android_material_icon_name="link" size={20} color={colors.primary} />
+                  <View style={{ flex: 1, marginLeft: spacing.sm }}>
+                    <Text style={styles.linkErrorUrl} numberOfLines={1}>
+                      {linkMetadata.url}
+                    </Text>
+                    <Text style={styles.linkErrorMessage}>
+                      {linkMetadata.error || 'Preview unavailable - Tap to open'}
+                    </Text>
+                    {linkMetadata.domain && (
+                      <Text style={styles.linkDomain}>{linkMetadata.domain}</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.removeLink} onPress={() => setLinkMetadata(null)}>
+                  <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              // Success/Partial state - show full preview
+              <>
+                {linkMetadata.image && (
+                    <Image source={{ uri: linkMetadata.image }} style={styles.linkImage} />
+                )}
+                <View style={styles.linkInfo}>
+                    <Text style={styles.linkTitle} numberOfLines={1}>{linkMetadata.title}</Text>
+                    <Text style={styles.linkDescription} numberOfLines={2}>{linkMetadata.description}</Text>
+                    <Text style={styles.linkDomain}>{linkMetadata.domain}</Text>
+                </View>
+                <TouchableOpacity style={styles.removeLink} onPress={() => setLinkMetadata(null)}>
+                  <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </>
             )}
-            <View style={styles.linkInfo}>
-                <Text style={styles.linkTitle} numberOfLines={1}>{linkMetadata.title}</Text>
-                <Text style={styles.linkDescription} numberOfLines={2}>{linkMetadata.description}</Text>
-                <Text style={styles.linkDomain}>{linkMetadata.domain}</Text>
-            </View>
-            <TouchableOpacity style={styles.removeLink} onPress={() => setLinkMetadata(null)}>
-              <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
           </View>
         )}
 
@@ -639,6 +704,31 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     position: 'relative',
     backgroundColor: colors.card,
+  },
+  linkErrorContainer: {
+    padding: spacing.md,
+    backgroundColor: colors.card,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  linkErrorContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  linkErrorUrl: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.primary,
+    marginBottom: 4,
+    textDecorationLine: 'underline',
+  },
+  linkErrorMessage: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 16,
+    marginBottom: 2,
   },
   linkImage: {
     width: '100%',

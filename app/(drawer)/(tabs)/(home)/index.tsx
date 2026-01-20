@@ -20,7 +20,7 @@ import { AdCard } from '@/components/AdCard';
 import { StoriesBar } from '@/components/StoriesBar';
 import { HomeComposer } from '@/components/HomeComposer';
 import { IconSymbol } from '@/components/IconSymbol';
-import { Post, Story } from '@/types';
+import { Post } from '@/types';
 import { apiClient } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -46,7 +46,6 @@ export default function HomeScreen() {
   const themeColors = isDark ? darkColors : lightColors;
   const [posts, setPosts] = useState<Post[]>([]);
   const [ads, setAds] = useState<FeedAd[]>([]);
-  const [stories, setStories] = useState<Story[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -84,15 +83,7 @@ export default function HomeScreen() {
     }
   }, []);
 
-  const loadStories = useCallback(async () => {
-    try {
-      const response = await apiClient.getStories();
-      setStories(response.data);
-    } catch (error) {
-      console.error('Failed to load stories:', error);
-      setStories([]);
-    }
-  }, []);
+
 
   const loadAds = useCallback(async () => {
     try {
@@ -108,16 +99,15 @@ export default function HomeScreen() {
     // Only load data when authenticated and not loading
     if (!authLoading && isAuthenticated) {
       loadFeed();
-      loadStories();
+      loadFeed();
       loadAds();
     }
-  }, [isAuthenticated, authLoading, loadFeed, loadStories, loadAds]);
+  }, [isAuthenticated, authLoading, loadFeed, loadAds]);
 
   const handleRefresh = useCallback(() => {
     loadFeed(null, true);
-    loadStories();
     loadAds();
-  }, [loadFeed, loadStories, loadAds]);
+  }, [loadFeed, loadAds]);
 
   const handleLoadMore = useCallback(() => {
     if (!isLoading && hasMore && cursor) {
@@ -163,10 +153,10 @@ export default function HomeScreen() {
 
   const renderHeader = useCallback(() => (
     <View>
-      <StoriesBar stories={stories} onCreateStory={handleCreateStory} />
+      <StoriesBar onCreateStory={handleCreateStory} />
       <HomeComposer />
     </View>
-  ), [stories, handleCreateStory]);
+  ), [handleCreateStory]);
 
   const renderEmpty = useCallback(() => (
     <View style={styles.emptyContainer}>

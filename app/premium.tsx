@@ -18,66 +18,23 @@ import { PremiumHeader } from '@/components/PremiumHeader';
 import { useAuthStore } from '@/stores/authStore';
 import { useWalletStore } from '@/stores/walletStore';
 import * as Haptics from 'expo-haptics';
+import { PREMIUM_PLANS, PremiumPlanConfig } from '@/utils/premium';
+import { PremiumPlanId } from '@/types';
 
 // Flutterwave placeholder - API key should be added here
 const FLUTTERWAVE_PUBLIC_KEY = 'FLWPUBK-xxxxxxxxxxxxxxxx-X'; // TODO: Add your Flutterwave public key
 
-interface Plan {
-    id: 'regular' | 'vip';
-    name: string;
-    price: number;
-    currency: string;
-    period: string;
-    features: string[];
-    highlighted?: boolean;
-    gradient: [string, string];
-}
-
-const PLANS: Plan[] = [
-    {
-        id: 'regular',
-        name: 'Regular',
-        price: 5000,
-        currency: 'RWF',
-        period: 'month',
-        features: [
-            'Unlimited posts',
-            'Unlimited product listings',
-            'Access to marketplace',
-            'Limited VIP interactions',
-            'Basic analytics',
-        ],
-        gradient: ['#667eea', '#764ba2'],
-    },
-    {
-        id: 'vip',
-        name: 'VIP',
-        price: 50000,
-        currency: 'RWF',
-        period: 'month',
-        features: [
-            'All Regular features',
-            'VIP profile badge ✓',
-            'Lower cost for celebrity interactions',
-            'Access to VIP Chat Rooms',
-            'Priority support',
-            'Exclusive content access',
-            'Advanced analytics',
-        ],
-        highlighted: true,
-        gradient: ['#f093fb', '#f5576c'],
-    },
-];
+const PLANS: PremiumPlanConfig[] = PREMIUM_PLANS;
 
 export default function PremiumScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { user } = useAuthStore();
     const { balance } = useWalletStore();
-    const [selectedPlan, setSelectedPlan] = useState<'regular' | 'vip' | null>(null);
+    const [selectedPlan, setSelectedPlan] = useState<PremiumPlanId | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const handleSubscribe = async (plan: Plan) => {
+    const handleSubscribe = async (plan: PremiumPlanConfig) => {
         if (!user) {
             Alert.alert('Login Required', 'Please login to subscribe to a plan.');
             return;
@@ -109,14 +66,14 @@ export default function PremiumScreen() {
         }
     };
 
-    const handlePayWithWallet = async (plan: Plan) => {
+    const handlePayWithWallet = async (plan: PremiumPlanConfig) => {
         if (!user) {
             Alert.alert('Login Required', 'Please login to subscribe.');
             return;
         }
 
-        // Convert RWF to coins (1000 coins = 1000 RWF)
-        const coinsNeeded = plan.price;
+        // Convert USD price to coins (use a simple 1 USD = 1000 coins placeholder)
+        const coinsNeeded = plan.walletCost || plan.price * 1000;
 
         if (balance < coinsNeeded) {
             Alert.alert(

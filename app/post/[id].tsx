@@ -22,6 +22,7 @@ import { Post, Comment } from '@/types';
 import { apiClient } from '@/services/api';
 import { useWalletStore } from '@/stores/walletStore';
 import * as Haptics from 'expo-haptics';
+import { isSpecialPremiumUser } from '@/utils/premium';
 
 export default function PostDetailScreen() {
   const router = useRouter();
@@ -129,6 +130,8 @@ export default function PostDetailScreen() {
     );
   }
 
+  const isVerifiedUser = post.user.isVerified || isSpecialPremiumUser(post.user.username);
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -167,7 +170,7 @@ export default function PostDetailScreen() {
             <View style={styles.mainUserInfo}>
               <View style={styles.nameRow}>
                 <Text style={styles.mainName}>{post.user.username}</Text>
-                {post.user.isVerified && (
+                {isVerifiedUser && (
                   <IconSymbol
                     ios_icon_name="checkmark.seal.fill"
                     android_material_icon_name="verified"

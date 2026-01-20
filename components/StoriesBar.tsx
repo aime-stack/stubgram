@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,30 +10,24 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { colors, spacing, borderRadius, typography } from '@/styles/commonStyles';
+import { colors, spacing, typography } from '@/styles/commonStyles';
 import { useThemeStore, darkColors, lightColors } from '@/stores/themeStore';
+import { useStoryStore } from '@/stores/storyStore';
 import { IconSymbol } from '@/components/IconSymbol';
-import { Story } from '@/types';
 
 interface StoriesBarProps {
-  stories: Story[];
   onCreateStory: () => void;
 }
 
-export function StoriesBar({ stories, onCreateStory }: StoriesBarProps) {
+export function StoriesBar({ onCreateStory }: StoriesBarProps) {
   const router = useRouter();
   const { isDark } = useThemeStore();
   const themeColors = isDark ? darkColors : lightColors;
+  const { storyGroups, fetchStories, isLoading } = useStoryStore();
 
-  const groupedStories = stories.reduce((acc, story) => {
-    if (!acc[story.userId]) {
-      acc[story.userId] = [];
-    }
-    acc[story.userId].push(story);
-    return acc;
-  }, {} as Record<string, Story[]>);
-
-  const userStories = Object.values(groupedStories);
+  useEffect(() => {
+    fetchStories();
+  }, []);
 
   return (
     <ScrollView
@@ -62,21 +56,17 @@ export function StoriesBar({ stories, onCreateStory }: StoriesBarProps) {
       </TouchableOpacity>
 
       {/* User Stories */}
-      {userStories.map((userStoryGroup, index) => {
-        const firstStory = userStoryGroup[0];
-        if (!firstStory) return null;
-
-        const hasUnviewed = userStoryGroup.some(s => !s.isViewed);
-        const user = firstStory.user || { avatar: undefined, username: 'User' };
-
+      {storyGroups.map((group, index) => {
+        const user = group.user || { avatar: undefined, username: 'User' };
+        
         return (
           <TouchableOpacity
-            key={index}
+            key={group.user.id}
             style={styles.storyItem}
-            onPress={() => router.push(`/stories/${firstStory.userId}`)}
+            onPress={() => router.push(`/stories/${group.user.id}`)}
           >
             <LinearGradient
-              colors={hasUnviewed ? [colors.primary, colors.secondary] : [themeColors.border, themeColors.border]}
+              colors={group.hasUnseen ? [colors.primary, colors.secondary] : [themeColors.border, themeColors.border]}
               style={styles.storyGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -153,7 +143,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   storyUsername: {
-    ...typography.small,
+    ...typography.caption,
+    fontSize: 12,
     color: colors.text,
     textAlign: 'center',
   },

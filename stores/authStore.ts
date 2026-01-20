@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import { User } from '@/types';
+import { withPremiumMetadata } from '@/utils/premium';
 import { useFollowStore } from './followStore';
 
 interface AuthState {
@@ -100,22 +101,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       // Map Supabase user + Profile to our User type
-      const appUser: User = {
-        id: session.user.id,
-        email: session.user.email!,
-        username: profile?.username || session.user.user_metadata?.username || 'User',
-        full_name: profile?.full_name || '',
-        avatar: profile?.avatar_url || '',
-        phone: '',
-        coverPhoto: '',
-        bio: profile?.bio || '',
-        isVerified: false,
-        isCelebrity: false,
-        followersCount: 0,
-        followingCount: 0,
-        postsCount: 0,
-        createdAt: session.user.created_at,
-      };
+      const appUser: User = withPremiumMetadata(
+        {
+          id: session.user.id,
+          email: session.user.email!,
+          username: profile?.username || session.user.user_metadata?.username || 'User',
+          full_name: profile?.full_name || '',
+          avatar: profile?.avatar_url || '',
+          phone: '',
+          coverPhoto: '',
+          bio: profile?.bio || '',
+          isVerified: profile?.is_verified || false,
+          isCelebrity: profile?.is_celebrity || false,
+          followersCount: 0,
+          followingCount: 0,
+          postsCount: 0,
+          createdAt: session.user.created_at,
+          accountType: profile?.account_type || 'regular',
+          account_type: profile?.account_type || 'regular',
+        },
+        profile?.account_type
+      );
 
       set({ user: appUser, isAuthenticated: true, isLoading: false });
 

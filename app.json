@@ -21,7 +21,8 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "We need access to your camera to let you share video in meetings.",
-        "NSMicrophoneUsageDescription": "We need access to your microphone to let you speak in meetings."
+        "NSMicrophoneUsageDescription": "We need access to your microphone to let you speak in meetings.",
+        "NSPhotoLibraryUsageDescription": "We need access to your photo library to let you select photos and videos for posts and stories."
       }
     },
     "android": {
@@ -36,7 +37,10 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.INTERNET"
+        "android.permission.INTERNET",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_EXTERNAL_STORAGE"
       ]
     },
     "web": {

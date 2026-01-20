@@ -161,7 +161,7 @@ export default function LessonScreen() {
                         <WebView
                             style={styles.video}
                             source={{ uri: getYouTubeEmbedUrl(lesson.videoUrl) }}
-                            allowsFullscreenVideo
+                            allowsFullscreen
                             allowsInlineMediaPlayback
                             mediaPlaybackRequiresUserAction={false}
                             javaScriptEnabled

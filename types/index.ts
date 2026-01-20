@@ -1,4 +1,6 @@
 
+export type PremiumPlanId = 'free' | 'basic' | 'premium' | 'premium_plus';
+
 export interface User {
   id: string;
   username: string;
@@ -20,6 +22,7 @@ export interface User {
   coins?: number;
   accountType?: 'regular' | 'vip' | 'industry';
   account_type?: 'regular' | 'premium' | 'vip' | 'industry'; // DB column match
+  premiumPlan?: PremiumPlanId;
   // Celebrity Chat specific fields
   category?: string;
   messagePrice?: number;
@@ -102,6 +105,7 @@ export interface Story {
   expiresAt: string;
   createdAt: string;
   isViewed: boolean;
+  viewsCount?: number;
 }
 
 export interface Conversation {

@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -26,12 +27,21 @@ export function HomeComposer() {
 
   const handleMediaPress = async (type: 'image' | 'video') => {
     try {
+      // Request media library permissions to ensure full gallery access
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'We need access to your media library to select photos and videos');
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: type === 'video' ? ['videos'] : ['images'],
         quality: 0.8,
         allowsEditing: false, 
         allowsMultipleSelection: type === 'image', // Consistent with create-post rules
         selectionLimit: type === 'image' ? 10 : 1,
+        defaultTab: 'albums', // Show albums/folders view initially for full gallery access
+        ...(Platform.OS === 'android' && { legacy: true }), // Use legacy picker on Android for broader access
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {

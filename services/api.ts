@@ -1,6 +1,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { Post, Reel, Story, User, Comment, Notification } from '@/types';
+import { withPremiumMetadata } from '@/utils/premium';
 import * as FileSystem from 'expo-file-system/legacy';
 
 class ApiClient {
@@ -809,18 +810,23 @@ class ApiClient {
 
     if (error || !profile) {
       // Return default user if not found
-      return {
-        id: userId,
-        username: 'User',
-        email: '',
-        avatar: undefined,
-        isVerified: false,
-        isCelebrity: false,
-        followersCount: 0,
-        followingCount: 0,
-        postsCount: 0,
-        createdAt: new Date().toISOString(),
-      } as User;
+      return withPremiumMetadata(
+        {
+          id: userId,
+          username: 'User',
+          email: '',
+          avatar: undefined,
+          isVerified: false,
+          isCelebrity: false,
+          followersCount: 0,
+          followingCount: 0,
+          postsCount: 0,
+          createdAt: new Date().toISOString(),
+          accountType: 'regular',
+          account_type: 'regular',
+        } as User,
+        'regular'
+      );
     }
 
     const mappedProfile = this.mapProfile(profile);
@@ -946,28 +952,32 @@ class ApiClient {
 
   private mapProfile(row: any): User {
     if (!row) return {} as User;
-    return {
-      id: row.id,
-      username: row.username || 'User',
-      email: '',
-      avatar: row.avatar_url,
-      coverPhoto: row.cover_url,
-      full_name: row.full_name,
-      bio: row.bio,
-      isVerified: row.is_verified || false,
-      isCelebrity: row.is_celebrity || false,
-      followersCount: row.followers_count || 0,
-      followingCount: row.following_count || 0,
-      postsCount: row.posts_count || 0,
-      createdAt: row.created_at || new Date().toISOString(),
-      coins: row.coins || 0,
-      accountType: row.account_type || 'regular',
-      // New fields for Celebrity Chat
-      category: row.category,
-      messagePrice: row.message_price,
-      rating: row.rating ? parseFloat(row.rating) : undefined,
-      isOnline: row.is_online,
-    } as User;
+    return withPremiumMetadata(
+      {
+        id: row.id,
+        username: row.username || 'User',
+        email: '',
+        avatar: row.avatar_url,
+        coverPhoto: row.cover_url,
+        full_name: row.full_name,
+        bio: row.bio,
+        isVerified: row.is_verified || false,
+        isCelebrity: row.is_celebrity || false,
+        followersCount: row.followers_count || 0,
+        followingCount: row.following_count || 0,
+        postsCount: row.posts_count || 0,
+        createdAt: row.created_at || new Date().toISOString(),
+        coins: row.coins || 0,
+        accountType: row.account_type || 'regular',
+        account_type: row.account_type || 'regular',
+        // New fields for Celebrity Chat
+        category: row.category,
+        messagePrice: row.message_price,
+        rating: row.rating ? parseFloat(row.rating) : undefined,
+        isOnline: row.is_online,
+      } as User,
+      row.account_type
+    );
   }
 
   private mapReel(row: any, profile?: User): Reel {
@@ -1010,6 +1020,38 @@ class ApiClient {
       hasMore: posts.length === limit,
     };
   }
+  async getStoriesFeed() {
+    const user = await this.requireAuth();
+
+    const { data, error } = await supabase.rpc('get_stories_feed', {
+      p_viewer_id: user.id
+    });
+
+    if (error) throw error;
+
+    return { data: data || [] };
+  }
+
+  async getStoryViewers(storyId: string) {
+    const { data, error } = await supabase
+      .from('story_views')
+      .select(`
+        viewed_at,
+        user:profiles!user_id(*)
+      `)
+      .eq('story_id', storyId)
+      .order('viewed_at', { ascending: false });
+
+    if (error) throw error;
+
+    return { 
+      data: data.map((item: any) => ({
+        ...item.user,
+        viewedAt: item.viewed_at
+      }))
+    };
+  }
+
   async getStories(userId?: string) {
     // 1. Fetch active stories with user profiles
     let query = supabase
