@@ -32,12 +32,21 @@ export default function CreatePostScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const { addCoins } = useWalletStore();
-  const params = useLocalSearchParams<{ mediaUri?: string; mediaType?: 'image' | 'video'; communityId?: string; initialType?: 'post' | 'reel' }>();
+const params = useLocalSearchParams<{ 
+  mediaUri?: string; 
+  mediaType?: 'image' | 'video'; 
+  communityId?: string; 
+  initialType?: 'post' | 'reel'; 
+  filter?: string;
+  mediaMetadata?: string; // JSON string
+}>();
 
-  const [postType, setPostType] = useState<'post' | 'reel'>(params.initialType || 'post');
-  const [content, setContent] = useState('');
-  const [mediaUri, setMediaUri] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
+const [postType, setPostType] = useState<'post' | 'reel'>(params.initialType || 'post');
+const [content, setContent] = useState('');
+const [mediaUri, setMediaUri] = useState<string | null>(null);
+const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
+const [selectedFilter, setSelectedFilter] = useState<string>(params.filter || 'Normal');
+const [editorMetadata, setEditorMetadata] = useState<any>(null);
 
   useEffect(() => {
     if (params.mediaUri) {
@@ -48,8 +57,20 @@ export default function CreatePostScreen() {
                 setPostType('reel');
             }
         }
+      if (params.filter) {
+          setSelectedFilter(params.filter);
+      }
+      if (params.mediaMetadata) {
+          try {
+              const parsed = JSON.parse(params.mediaMetadata);
+              setEditorMetadata(parsed);
+              if (parsed.filter) setSelectedFilter(parsed.filter);
+          } catch (e) {
+              console.error('Failed to parse media metadata', e);
+          }
+      }
     }
-  }, [params.mediaUri, params.mediaType]);
+  }, [params.mediaUri, params.mediaType, params.mediaMetadata]);
   const [pollOptions, setPollOptions] = useState<string[]>([]);
   const [feeling, setFeeling] = useState<string | undefined>(undefined);
   const [showFeelingSelector, setShowFeelingSelector] = useState(false);
@@ -129,8 +150,6 @@ export default function CreatePostScreen() {
         allowsEditing: false, 
         allowsMultipleSelection: allowsMultiple,
         selectionLimit: allowsMultiple ? 10 : 1,
-        defaultTab: 'albums', // Show albums/folders view initially for full gallery access
-        ...(Platform.OS === 'android' && { legacy: true }), // Use legacy picker on Android for broader access
       });
 
       if (!result.canceled) {
@@ -252,6 +271,13 @@ export default function CreatePostScreen() {
       let type: 'post' | 'reel' | 'poll' = postType;
       if (showPollInput) type = 'poll';
 
+      // Non-destructive edit metadata for downstream rendering/export
+      const mediaMetadata = editorMetadata || {
+        editorVersion: 2,
+        filter: selectedFilter,
+        edits: [],
+      };
+
       setUploadProgress(95);
       await apiClient.createPost({
         type,
@@ -265,6 +291,7 @@ export default function CreatePostScreen() {
         aspectRatio: aspectRatio,
         originalMetadata: { width: aspectRatio * 100, height: 100 },
         feeling: feeling,
+        mediaMetadata,
       });
 
       // V2: Points handled by backend. We just notify user.
@@ -424,6 +451,20 @@ export default function CreatePostScreen() {
                         >
                             <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={24} color="#000" />
                        </TouchableOpacity>
+                       <TouchableOpacity 
+                            style={styles.editMedia} 
+                            onPress={() => {
+                                router.push({
+                                    pathname: '/media-editor' as any,
+                                    params: { mediaUri: item.uri, mediaType: item.type, returnPath: '/create-post' }
+                                });
+                            }}
+                        >
+                            <IconSymbol ios_icon_name="pencil.circle.fill" android_material_icon_name="edit" size={24} color={colors.primary} />
+                       </TouchableOpacity>
+                       <View style={styles.filterBadge}>
+                         <Text style={styles.filterBadgeText}>{selectedFilter}</Text>
+                       </View>
                    </View>
                ))}
            </ScrollView>
@@ -433,6 +474,20 @@ export default function CreatePostScreen() {
             <TouchableOpacity style={styles.removeMedia} onPress={() => { setMediaUri(null); setMediaType('image'); }}>
               <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={24} color="#000" />
             </TouchableOpacity>
+            <TouchableOpacity 
+                style={styles.editMedia} 
+                onPress={() => {
+                    router.push({
+                        pathname: '/media-editor' as any,
+                        params: { mediaUri, mediaType, returnPath: '/create-post' }
+                    });
+                }}
+            >
+                <IconSymbol ios_icon_name="pencil.circle.fill" android_material_icon_name="edit" size={24} color={colors.primary} />
+            </TouchableOpacity>
+            <View style={styles.filterBadge}>
+              <Text style={styles.filterBadgeText}>{selectedFilter}</Text>
+            </View>
           </View>
         ))}
 
@@ -624,6 +679,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.8)',
     borderRadius: 12,
   },
+  editMedia: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 12,
+  },
   pollContainer: {
     marginHorizontal: spacing.md,
     marginBottom: spacing.md,
@@ -789,5 +851,20 @@ const styles = StyleSheet.create({
       width: '100%',
       height: '100%',
       resizeMode: 'cover',
+  },
+  filterBadge: {
+      position: 'absolute',
+      left: spacing.sm,
+      bottom: spacing.sm,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 12,
+  },
+  filterBadgeText: {
+      color: '#FFF',
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.5,
   },
 });

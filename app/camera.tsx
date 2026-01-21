@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, SafeAreaView, Alert, Platform, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Alert, Platform, ActivityIndicator, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, useMicrophonePermissions, CameraCapturedPicture, CameraRecordingOptions } from 'expo-camera';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
@@ -9,8 +10,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // @ts-ignore
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
+// @ts-ignore
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as ImagePicker from 'expo-image-picker';
+// @ts-ignore
+import { ColorMatrix, saturate, concatColorMatrices, contrast, brightness, sepia } from 'react-native-color-matrix-image-filters';
+import { Image } from 'expo-image';
+import StickerPicker from '@/components/MediaEditor/StickerPicker';
 
 const { width, height } = Dimensions.get('window');
+const NINE_BY_SIXTEEN = 9 / 16;
 
 export default function CameraScreen() {
   const router = useRouter();
@@ -28,6 +37,19 @@ export default function CameraScreen() {
   const [isCapturing, setIsCapturing] = useState(false);
   const [mode, setMode] = useState<'picture' | 'video'>('video');
   const [activeFilter, setActiveFilter] = useState('Normal');
+  const [isFrontMirrored, setIsFrontMirrored] = useState(true); // default front camera mirror fix
+  const [isStickerPickerVisible, setIsStickerPickerVisible] = useState(false);
+  const [overlays, setOverlays] = useState<any[]>([]);
+  const [lastCapturedUri, setLastCapturedUri] = useState<string | null>(null);
+
+  const filterMatrices: Record<string, any> = {
+    'Normal': null,
+    'Vivid': saturate(1.5),
+    'B&W': saturate(0),
+    'Sepia': sepia(),
+    'Cool': concatColorMatrices(saturate(0.8), brightness(1.1)),
+    'Warm': concatColorMatrices(saturate(1.2), contrast(1.1)),
+  };
 
   useEffect(() => {
     let interval: any;
@@ -87,19 +109,39 @@ export default function CameraScreen() {
     
     setIsCapturing(true);
     try {
+      // Improved quality and ensured full resolution
       const photo = await cameraRef.current.takePictureAsync({
         quality: 1,
         base64: false,
-        exif: false,
+        exif: true,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
       if (photo?.uri) {
-          const persistentUri = await saveToPersistentStorage(photo.uri, 'image');
-          // Navigate to create post with image
+          let finalUri = photo.uri;
+          
+          if (facing === 'front' && isFrontMirrored) {
+            try {
+              const manipulated = await ImageManipulator.manipulateAsync(photo.uri, [
+                { flip: ImageManipulator.FlipType.Horizontal },
+              ]);
+              finalUri = manipulated.uri;
+            } catch (e) {
+              console.warn('Failed to flip front capture:', e);
+            }
+          }
+
+          const persistentUri = await saveToPersistentStorage(finalUri, 'image');
+          setLastCapturedUri(persistentUri);
+          
           router.push({
-            pathname: '/create-post',
-            params: { mediaUri: persistentUri, mediaType: 'image' }
+            pathname: '/media-editor' as any,
+            params: { 
+              mediaUri: persistentUri, 
+              mediaType: 'image', 
+              filter: activeFilter,
+              initialOverlays: JSON.stringify(overlays)
+            }
           });
       }
     } catch (error) {
@@ -118,15 +160,19 @@ export default function CameraScreen() {
     
     try {
       const video = await cameraRef.current.recordAsync({
-        maxDuration: 60, // V2: We might want to increase this, but keeping it safe for now.
+        maxDuration: 60,
       });
       
       if (video?.uri) {
         const persistentUri = await saveToPersistentStorage(video.uri, 'video');
-        // Navigate to create post with video
+        setLastCapturedUri(persistentUri);
         router.push({
-            pathname: '/create-post',
-            params: { mediaUri: persistentUri, mediaType: 'video' }
+            pathname: '/media-editor' as any,
+            params: { 
+              mediaUri: persistentUri, 
+              mediaType: 'video', 
+              filter: activeFilter,
+            }
         });
       }
     } catch (error) {
@@ -139,7 +185,11 @@ export default function CameraScreen() {
 
   const stopRecording = async () => {
     if (!cameraRef.current || !isRecording) return;
-    cameraRef.current.stopRecording();
+    try {
+      cameraRef.current.stopRecording();
+    } catch (e) {
+      console.error('Failed to stop recording:', e);
+    }
     setIsRecording(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -150,16 +200,58 @@ export default function CameraScreen() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const addSticker = (emoji: string) => {
+    const newOverlay = {
+      id: Date.now().toString(),
+      content: emoji,
+      x: width / 2 - 20, // Initial position, can be made draggable later
+      y: height / 2 - 20,
+    };
+    setOverlays((prev) => [...prev, newOverlay]);
+    setIsStickerPickerVisible(false);
+  };
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      allowsEditing: false,
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      router.push({
+        pathname: '/media-editor' as any,
+        params: { 
+          mediaUri: asset.uri, 
+          mediaType: asset.type === 'video' ? 'video' : 'image', 
+        }
+      });
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <CameraView
-        ref={cameraRef}
-        style={styles.camera}
-        facing={facing}
-        flash={flash}
-        mode={mode}
-      >
-        <SafeAreaView style={styles.overlay}>
+      <ColorMatrix matrix={filterMatrices[activeFilter]}>
+        <View style={styles.cameraWrapper}>
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing={facing}
+            flash={flash}
+            mode={mode}
+            ratio="16:9"
+            videoQuality="1080p"
+          />
+          
+          {/* Live Overlays */}
+          {overlays.map(overlay => (
+            <View key={overlay.id} style={[styles.liveOverlay, { left: overlay.x, top: overlay.y }]}>
+              <Text style={styles.overlayEmoji}>{overlay.content}</Text>
+            </View>
+          ))}
+
+          <SafeAreaView style={styles.overlay}>
           {/* Header */}
           <View style={[styles.header, { top: insets.top + spacing.sm }]}>
             <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
@@ -176,6 +268,9 @@ export default function CameraScreen() {
             </View>
 
             <View style={styles.headerRight}>
+              <TouchableOpacity onPress={() => setIsStickerPickerVisible(true)} style={[styles.iconButton, { marginRight: 10 }]}>
+                <IconSymbol ios_icon_name="face.smiling" android_material_icon_name="face" size={24} color="#FFF" />
+              </TouchableOpacity>
               <TouchableOpacity onPress={toggleFlash} style={styles.iconButton}>
                 <IconSymbol 
                   ios_icon_name={flash === 'on' ? "bolt.fill" : flash === 'auto' ? "bolt.badge.a.fill" : "bolt.slash.fill"} 
@@ -223,8 +318,12 @@ export default function CameraScreen() {
             </View>
 
             <View style={styles.mainControls}>
-                <TouchableOpacity style={styles.secondaryButton}>
-                   <View style={styles.galleryPreview} />
+                <TouchableOpacity style={styles.secondaryButton} onPress={pickImage}>
+                   {lastCapturedUri ? (
+                     <Image source={{ uri: lastCapturedUri }} style={styles.galleryPreview} />
+                   ) : (
+                     <View style={styles.galleryPreview} />
+                   )}
                 </TouchableOpacity>
 
                 <TouchableOpacity 
@@ -241,8 +340,14 @@ export default function CameraScreen() {
                 </TouchableOpacity>
             </View>
           </View>
-        </SafeAreaView>
-      </CameraView>
+          </SafeAreaView>
+        </View>
+      </ColorMatrix>
+      <StickerPicker 
+        isVisible={isStickerPickerVisible} 
+        onClose={() => setIsStickerPickerVisible(false)}
+        onSelect={addSticker}
+      />
     </View>
   );
 }
@@ -265,8 +370,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   overlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'space-between',
+  },
+  cameraWrapper: {
+    flex: 1,
+    width: width,
+    height: height,
   },
   header: {
     position: 'absolute',
@@ -422,5 +532,12 @@ const styles = StyleSheet.create({
   },
   activeFilterText: {
     color: '#000',
+  },
+  liveOverlay: {
+    position: 'absolute',
+    padding: 10,
+  },
+  overlayEmoji: {
+    fontSize: 60,
   },
 });

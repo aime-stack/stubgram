@@ -1,0 +1,39 @@
+﻿env: load .env
+env: export SUPABASE_SERVICE_ROLE_KEY SUPABASE_URL EXPO_PUBLIC_API_URL EXPO_PUBLIC_WS_URL EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY PAYPACK_CLIENT_ID PAYPACK_CLIENT_SECRET PAYPACK_WEBHOOK_SECRET LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET LIVEKIT_WS_URL
+node.exe : The following packages should be updated for best 
+compatibility with the installed expo version:
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" 
+"C:\Users\user\AppData\Roaming\n ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~
+    + CategoryInfo          : NotSpecified: (The following p... 
+   d expo version::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  @expo/vector-icons@14.1.0 - expected version: ~14.0.4
+  @react-native-async-storage/async-storage@2.2.0 - expected 
+version: 1.23.1
+  @react-native-community/datetimepicker@8.4.4 - expected 
+version: 8.2.0
+  @react-native-community/slider@4.5.7 - expected version: 4.5.5
+  expo-apple-authentication@8.0.8 - expected version: ~7.1.3
+  expo-audio@1.0.16 - expected version: ~0.3.5
+  expo-auth-session@7.0.10 - expected version: ~6.0.3
+  expo-image@1.13.0 - expected version: ~2.0.7
+  expo-updates@0.26.19 - expected version: ~0.27.4
+  react-native@0.76.6 - expected version: 0.76.9
+  react-native-gesture-handler@2.28.0 - expected version: 
+~2.20.2
+  react-native-maps@1.20.1 - expected version: 1.18.0
+  react-native-reanimated@4.1.6 - expected version: ~3.16.1
+  react-native-safe-area-context@5.6.2 - expected version: 
+4.12.0
+  react-native-screens@4.16.0 - expected version: ~4.4.0
+  react-native-web@0.21.2 - expected version: ~0.19.13
+  react-native-webview@13.15.0 - expected version: 13.12.5
+  @types/react@19.1.17 - expected version: ~18.3.12
+  eslint-config-expo@10.0.0 - expected version: ~8.0.1
+Your project may not work correctly until you install the 
+expected versions of the packages.
+Found outdated dependencies

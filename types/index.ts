@@ -106,6 +106,7 @@ export interface Story {
   createdAt: string;
   isViewed: boolean;
   viewsCount?: number;
+  mediaMetadata?: any;
 }
 
 export interface Conversation {

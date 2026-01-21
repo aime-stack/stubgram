@@ -40,8 +40,6 @@ export function HomeComposer() {
         allowsEditing: false, 
         allowsMultipleSelection: type === 'image', // Consistent with create-post rules
         selectionLimit: type === 'image' ? 10 : 1,
-        defaultTab: 'albums', // Show albums/folders view initially for full gallery access
-        ...(Platform.OS === 'android' && { legacy: true }), // Use legacy picker on Android for broader access
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {

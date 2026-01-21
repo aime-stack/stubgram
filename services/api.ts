@@ -2,7 +2,7 @@
 import { supabase } from '@/lib/supabase';
 import { Post, Reel, Story, User, Comment, Notification } from '@/types';
 import { withPremiumMetadata } from '@/utils/premium';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 
 class ApiClient {
   private backendUrl = process.env.EXPO_PUBLIC_API_URL || 'https://v6r7hhgft77nghz9ncgpb9mfgkx69bg4.app.specular.dev';
@@ -130,7 +130,7 @@ class ApiClient {
           },
           uploadType: (FileSystem as any).FileSystemUploadType?.BINARY_CONTENT ?? (FileSystem as any).UploadType?.BINARY_CONTENT ?? 0,
         },
-        (data) => {
+        (data: any) => {
           if (onProgress) {
              const progress = data.totalBytesSent / data.totalBytesExpectedToSend;
              onProgress(Math.round(progress * 100));
@@ -585,6 +585,7 @@ class ApiClient {
     mediaUri?: string;
     content?: string;
     backgroundColor?: string;
+    mediaMetadata?: any;
   }) {
     const user = await this.requireAuth();
 
@@ -610,6 +611,7 @@ class ApiClient {
         media_url: mediaUrl,
         content: data.content,
         background_color: data.backgroundColor,
+        media_metadata: data.mediaMetadata,
         expires_at: expiresAt.toISOString(),
       })
       .select('*')

@@ -214,7 +214,7 @@ const StoryUserView = React.memo(({ group, isActive, onNextUser, onPrevUser, onC
             )}
 
             {/* Viewers Modal */}
-            <Modal visible={showViewers} animationType="slide" transparent presentationStyle="pageSheet" onRequestClose={handleCloseViewers}>
+            <Modal visible={showViewers} animationType="slide" onRequestClose={handleCloseViewers}>
                 <View style={styles.modalContainer}>
                     <View style={styles.modalHeader}>
                         <Text style={styles.modalTitle}>Story Views</Text>

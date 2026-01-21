@@ -1,0 +1,23 @@
+﻿ Volume in drive C is Windows-SSD
+ Volume Serial Number is BEA2-4504
+
+ Directory of C:\Users\user\Videos\SnapGram\node_modules\expo-modules-autolinking
+
+01/20/2026  11:41 AM    <DIR>          .
+01/21/2026  08:41 AM    <DIR>          ..
+01/20/2026  11:41 AM               103 .eslintrc.js
+01/20/2026  11:41 AM    <DIR>          bin
+01/20/2026  11:41 AM    <DIR>          build
+01/20/2026  11:41 AM            16,948 CHANGELOG.md
+01/20/2026  11:41 AM    <DIR>          e2e
+01/20/2026  11:41 AM                37 exports.d.ts
+01/20/2026  11:41 AM                49 exports.js
+01/20/2026  11:41 AM               151 jest.config.js
+01/20/2026  11:41 AM    <DIR>          node_modules_mock
+01/20/2026  11:41 AM             1,420 package.json
+01/20/2026  11:41 AM             1,265 README.md
+01/20/2026  11:41 AM    <DIR>          scripts
+01/20/2026  11:41 AM    <DIR>          src
+01/20/2026  11:41 AM               622 tsconfig.json
+               8 File(s)         20,595 bytes
+               8 Dir(s)  72,886,292,480 bytes free

@@ -50,8 +50,10 @@
     "plugins": [
       "expo-font",
       "expo-router",
-      "expo-web-browser",
-      "expo-audio"
+      "expo-audio",
+      "expo-camera",
+      "expo-media-library",
+      "expo-video"
     ],
     "scheme": "natively",
     "experiments": {

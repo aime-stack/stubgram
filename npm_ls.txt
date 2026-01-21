@@ -1,0 +1,18 @@
+﻿Natively@1.0.0 C:\Users\user\Videos\SnapGram
+Γö£ΓöÇΓö¼ expo-auth-session@7.0.10
+Γöé ΓööΓöÇΓö¼ expo-constants@18.0.13
+Γöé   ΓööΓöÇΓö¼ @expo/config@12.0.13
+Γöé     ΓööΓöÇΓöÇ @expo/config-plugins@54.0.4
+Γö£ΓöÇΓö¼ expo-constants@17.0.8
+Γöé ΓööΓöÇΓö¼ @expo/config@10.0.11
+Γöé   ΓööΓöÇΓöÇ @expo/config-plugins@9.0.17 deduped
+Γö£ΓöÇΓö¼ expo-splash-screen@0.29.24
+Γöé ΓööΓöÇΓö¼ @expo/prebuild-config@8.2.0
+Γöé   ΓööΓöÇΓöÇ @expo/config-plugins@9.0.17 deduped
+Γö£ΓöÇΓö¼ expo-updates@0.26.19
+Γöé ΓööΓöÇΓöÇ @expo/config-plugins@9.0.17
+ΓööΓöÇΓö¼ expo@52.0.48
+  Γö£ΓöÇΓö¼ @expo/cli@0.22.27
+  Γöé ΓööΓöÇΓöÇ @expo/config-plugins@9.0.17 deduped
+  ΓööΓöÇΓöÇ @expo/config-plugins@9.0.17 deduped
+

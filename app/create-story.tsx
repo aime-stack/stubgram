@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -11,7 +11,7 @@ import {
     ActivityIndicator,
     Platform,
 } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, typography, borderRadius } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
@@ -36,11 +36,31 @@ const BACKGROUND_COLORS = [
 export default function CreateStoryScreen() {
     const router = useRouter();
     const { addCoins } = useWalletStore();
-    const [storyType, setStoryType] = useState<StoryType>('image');
-    const [mediaUri, setMediaUri] = useState<string | null>(null);
+    const params = useLocalSearchParams<{
+        mediaUri?: string;
+        mediaType?: string;
+        mediaMetadata?: string;
+    }>();
+
+    const [storyType, setStoryType] = useState<StoryType>( (params.mediaType as any) || 'image');
+    const [mediaUri, setMediaUri] = useState<string | null>(params.mediaUri || null);
+    const [editorMetadata, setEditorMetadata] = useState<any>(null);
     const [textContent, setTextContent] = useState('');
     const [backgroundColor, setBackgroundColor] = useState(BACKGROUND_COLORS[0]);
     const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        if (params.mediaUri) {
+            setMediaUri(params.mediaUri);
+        }
+        if (params.mediaMetadata) {
+            try {
+                setEditorMetadata(JSON.parse(params.mediaMetadata));
+            } catch (e) {
+                console.error('Failed to parse media metadata', e);
+            }
+        }
+    }, [params.mediaUri, params.mediaMetadata]);
 
     const handlePickImage = async (useCamera: boolean) => {
         try {
@@ -68,8 +88,6 @@ export default function CreateStoryScreen() {
                     mediaTypes: storyType === 'video' ? ['videos'] : ['images'],
                     allowsEditing: false,
                     quality: 0.8,
-                    defaultTab: 'albums', // Show albums/folders view initially for full gallery access
-                    ...(Platform.OS === 'android' && { legacy: true }), // Use legacy picker on Android for broader access
                 });
             }
 
@@ -100,6 +118,7 @@ export default function CreateStoryScreen() {
                 mediaUri: mediaUri || undefined,
                 content: storyType === 'text' ? textContent.trim() : undefined,
                 backgroundColor: storyType === 'text' ? backgroundColor : undefined,
+                mediaMetadata: editorMetadata,
             });
 
             // Reward user with coins
@@ -200,6 +219,17 @@ export default function CreateStoryScreen() {
                                 size={32}
                                 color={colors.error}
                             />
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                            style={styles.editButton} 
+                            onPress={() => {
+                                router.push({
+                                    pathname: '/media-editor' as any,
+                                    params: { mediaUri, mediaType: storyType === 'video' ? 'video' : 'image', returnPath: '/create-story' }
+                                });
+                            }}
+                        >
+                            <IconSymbol ios_icon_name="pencil.circle.fill" android_material_icon_name="edit" size={32} color={colors.primary} />
                         </TouchableOpacity>
                     </View>
                 ) : (
@@ -339,6 +369,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: spacing.md,
         right: spacing.md,
+    },
+    editButton: {
+        position: 'absolute',
+        top: spacing.md,
+        left: spacing.md,
     },
     pickMediaContainer: {
         flex: 1,
